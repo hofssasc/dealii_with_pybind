@@ -1,0 +1,24 @@
+# out-of-source build and install trees
+/build*/
+/install/
+
+# CMake artifacts (e.g. from an accidental in-source configure)
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+CTestTestfile.cmake
+DartConfiguration.tcl
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+Testing/
+
+# python
+__pycache__/
+*.py[cod]
+
+# editors
+.vscode/
+.idea/
+*.swp

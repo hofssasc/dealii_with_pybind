@@ -3,10 +3,12 @@ cmake_minimum_required(VERSION 3.16)
 SET(CMAKE_CXX_STANDARD 17)
 
 # custom macros
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+# (PROJECT_SOURCE_DIR is still empty here because project() comes later)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 
-# This project uses deal.II
+# For bindings directly with dealii
+# Called before project definition
 find_package(deal.II 9.7 QUIET
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}
   )
@@ -18,14 +20,21 @@ if(NOT ${deal.II_FOUND})
     )
 endif()
 
-find_package(EXADG REQUIRED
-  HINTS ${EXADG_DIR})
-
-
 deal_ii_initialize_cached_variables()
 
+
 project(dealii_with_pybind LANGUAGES CXX)
+
+find_package(EXADG REQUIRED
+  HINTS ${EXADG_DIR})
 
 add_subdirectory(extern/pybind11)
 add_subdirectory(python)
 add_subdirectory(exec)
+
+# Testsuite: C++ tests via deal_ii_pickup_tests(), python tests via
+# pybind_pickup_tests() (cmake/PybindPickupTests.cmake)
+include(PybindPickupTests)
+
+enable_testing()
+add_subdirectory(tests)
