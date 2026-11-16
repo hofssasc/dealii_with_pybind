@@ -1,4 +1,4 @@
-// Dummy test to check the C++ testsuite setup: links against the "code"
+// Dummy test to check the C++ testsuite setup: links against the "applications"
 // library and compares its log against dummy.output.
 
 #include "../tests.h"
