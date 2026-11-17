@@ -7,3 +7,7 @@ linfty_norm: 4.0
 mean_value: 2.5
 v * w: 60.0
 after axpy, all_zero: True
+out of range: IndexError
+buffer shape: (4,)
+<dealii_core_module.DistributedVector of size 3>
+distributed locally_owned_size: 3, buffer shape: (3,)

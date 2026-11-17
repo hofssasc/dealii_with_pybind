@@ -22,3 +22,17 @@ print(f"v * w: {v * w}")
 
 w.axpy(-2.0, v)
 print(f"after axpy, all_zero: {w.all_zero()}")
+
+
+try:
+    v[len(v)]
+except IndexError:
+    print("out of range: IndexError")
+
+import numpy as np
+a = np.asarray(v)
+print(f"buffer shape: {a.shape}")
+
+d = dealii.DistributedVector(3)
+print(repr(d))
+print(f"distributed locally_owned_size: {d.locally_owned_size()}, buffer shape: {np.asarray(d).shape}")
