@@ -10,6 +10,7 @@ target_sources(applications
 	        include
 	    FILES
 	        include/code.h
+	        include/vector_space.h
   )
 
 target_link_libraries(applications PUBLIC dealii::dealii)

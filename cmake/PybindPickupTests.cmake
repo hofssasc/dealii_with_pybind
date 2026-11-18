@@ -22,6 +22,8 @@
 #   TEST_PYTHON_MODULES  - module targets (pybind11 extension libraries) the
 #                          tests import. Their directories are prepended to
 #                          PYTHONPATH and a setup test builds them first.
+#   TEST_PYTHON_PATH     - further directories prepended to PYTHONPATH, e.g.
+#                          those of pure python packages in the source tree
 #   TEST_PICKUP_REGEX    - only set up tests whose "<category>/<name>"
 #                          matches (also read from the environment)
 #   TEST_TIME_LIMIT      - per-test timeout in seconds (default 600)
@@ -226,6 +228,9 @@ function(pybind_pickup_tests)
     foreach(_module ${TEST_PYTHON_MODULES})
       list(APPEND _env_modification
         "PYTHONPATH=path_list_prepend:$<TARGET_FILE_DIR:${_module}>")
+    endforeach()
+    foreach(_path ${TEST_PYTHON_PATH})
+      list(APPEND _env_modification "PYTHONPATH=path_list_prepend:${_path}")
     endforeach()
 
     set_tests_properties(${_test_full} PROPERTIES

@@ -1,0 +1,20 @@
+equal to a space wrapping the same C++ space: ok
+equal to a space of the same dimension: ok
+to_numpy: ok
+inner: ok
+pairwise_inner: ok
+norm: ok
+norm2: ok
+sup_norm: ok
+dofs: ok
+amax: ok
+lincomb: ok
+scal, axpy: ok
+copy is not changed by its original: ok
+complex inner: ok
+complex amax: ok
+gram_schmidt: ok
+gram_schmidt gramian: ok
+random: ok
+zeros: ok
+full: ok

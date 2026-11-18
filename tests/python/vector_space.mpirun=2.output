@@ -1,0 +1,13 @@
+space: <dealii_core_module.DistributedVectorSpace of dimension 10>
+equal to itself: True
+equal to another space of the same dimension: False
+to_numpy(from_numpy(data)) == data: True
+l2_norm matches numpy: True
+dofs [0, 4, 9]: [ 1.   0.5 -1. ]
+amax: (2, 9.0)
+create_vector: <dealii_core_module.DistributedVector of size 10>, all_zero: True
+from_numpy with the wrong length: ValueError: Expected a one-dimensional array of length 10.
+dofs out of range: IndexError: index 10 out of range for dimension 10
+vector of another space: ValueError: The vector does not belong to this space.
+serial space: <dealii_core_module.VectorSpace of dimension 4>, vector: <dealii_core_module.Vector of size 4>
+serial to_numpy: [ 3. -4.  0.  1.], amax: (1, 4.0), dofs [1, 3]: [-4.  1.]

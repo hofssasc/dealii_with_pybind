@@ -6,14 +6,23 @@ dealii_pybind_add_module(example
   LINK    applications
   )
 
+# applications provides the VectorSpace interface (vector_space.h)
 dealii_pybind_add_module(dealii_core_module
   SOURCES bindings/dealii_core_module.cc
-  LINK    dealii::dealii
+  LINK    dealii::dealii applications
   )
+
+# pyMOR adapter (pure python), installed next to the modules it wraps
+install(
+    DIRECTORY dealii_pymor
+    DESTINATION python
+    FILES_MATCHING PATTERN "*.py"
+    PATTERN "__pycache__" EXCLUDE
+)
 
 # install python scripts
 install(
-    DIRECTORY scripts/
-    DESTINATION python/scripts
+    DIRECTORY scripts
+    DESTINATION python
     FILES_MATCHING PATTERN "*.py"
 )
