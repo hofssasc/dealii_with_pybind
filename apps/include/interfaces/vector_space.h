@@ -4,8 +4,10 @@
 #include <deal.II/base/exceptions.h>
 #include <deal.II/base/index_set.h>
 #include <deal.II/base/mpi.h>
+#include <deal.II/base/partitioner.h>
 #include <deal.II/base/types.h>
 
+#include <deal.II/lac/affine_constraints.h>
 #include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/vector.h>
 
@@ -21,7 +23,8 @@
  * that (gathering into NumPy arrays, picking single entries) is built on locally_owned_dofs() and
  * communicator() in the bindings.
  *
- * Most applications derive from PartitionedVectorSpace below instead of implementing this directly.
+ * Most applications use PartitionedVectorSpace or ConstrainedVectorSpace below instead of
+ * implementing this directly.
  */
 template<typename VectorType>
 class VectorSpace
@@ -41,7 +44,7 @@ public:
 
   // Global indices of the entries stored on this rank. Disjoint between ranks, all of them together
   // make up [0, n_dofs()).
-  virtual dealii::IndexSet const &
+  virtual const dealii::IndexSet &
   locally_owned_dofs() const = 0;
 
   // A zero vector with this space's partitioning. Ghost entries, if the vector stores any, are zero
@@ -77,80 +80,123 @@ public:
  *                                      DoFTools::extract_locally_relevant_dofs(dof_handler),
  *                                      dof_handler.get_mpi_communicator());
  *
- * Derive from it to add constraints via make_admissible(), or to create vectors through
- * MatrixFree::initialize_dof_vector() so they match the partitioner the operators use.
+ * or by the partitioner of a MatrixFree object, so that the vectors match the ones its operators
+ * work on:
+ *
+ *   PartitionedVectorSpace<VectorType>(matrix_free.get_vector_partitioner());
+ *
+ * All vectors share one partitioner, so creating a vector needs no communication.
+ *
+ * Derive from it to add constraints via make_admissible(), see ConstrainedVectorSpace.
  */
 template<typename VectorType>
 class PartitionedVectorSpace : public VectorSpace<VectorType>
 {
 public:
-  PartitionedVectorSpace(dealii::IndexSet locally_owned_dofs,
-                         dealii::IndexSet ghost_dofs,
-                         MPI_Comm const   communicator)
-    : owned_dofs(std::move(locally_owned_dofs)),
-      ghost_dofs(std::move(ghost_dofs)),
-      mpi_communicator(communicator)
+  PartitionedVectorSpace(const dealii::IndexSet & locally_owned_dofs,
+                         const dealii::IndexSet & ghost_dofs,
+                         const MPI_Comm           communicator)
+    : partitioner(std::make_shared<const dealii::Utilities::MPI::Partitioner>(locally_owned_dofs,
+                                                                               ghost_dofs,
+                                                                               communicator))
   {
   }
 
   // A space without ghost entries.
-  PartitionedVectorSpace(dealii::IndexSet locally_owned_dofs, MPI_Comm const communicator)
+  PartitionedVectorSpace(const dealii::IndexSet & locally_owned_dofs, const MPI_Comm communicator)
     : PartitionedVectorSpace(locally_owned_dofs,
                              dealii::IndexSet(locally_owned_dofs.size()),
                              communicator)
   {
   }
 
+  explicit PartitionedVectorSpace(
+    std::shared_ptr<const dealii::Utilities::MPI::Partitioner> partitioner)
+    : partitioner(std::move(partitioner))
+  {
+  }
+
   MPI_Comm
   communicator() const override
   {
-    return mpi_communicator;
+    return partitioner->get_mpi_communicator();
   }
 
-  dealii::IndexSet const &
+  const dealii::IndexSet &
   locally_owned_dofs() const override
   {
-    return owned_dofs;
+    return partitioner->locally_owned_range();
   }
 
   std::shared_ptr<VectorType>
   create_vector() const override
   {
     auto vector = std::make_shared<VectorType>();
-    reinit(*vector, owned_dofs, ghost_dofs, mpi_communicator);
+    reinit(*vector, partitioner);
     return vector;
   }
 
 private:
   template<typename Number>
   static void
-  reinit(dealii::Vector<Number> & vector,
-         dealii::IndexSet const & locally_owned_dofs,
-         dealii::IndexSet const & /*ghost_dofs*/,
-         MPI_Comm const communicator)
+  reinit(dealii::Vector<Number> &                                           vector,
+         const std::shared_ptr<const dealii::Utilities::MPI::Partitioner> & partitioner)
   {
-    AssertThrow(dealii::Utilities::MPI::n_mpi_processes(communicator) == 1,
+    AssertThrow(partitioner->locally_owned_size() == partitioner->size(),
                 dealii::ExcMessage("A dealii::Vector cannot be distributed over several ranks, "
                                    "use LinearAlgebra::distributed::Vector instead."));
-    AssertThrow(locally_owned_dofs.n_elements() == locally_owned_dofs.size(),
-                dealii::ExcMessage("A dealii::Vector has to own all of its entries."));
 
-    vector.reinit(locally_owned_dofs.size());
+    vector.reinit(partitioner->size());
   }
 
   template<typename Number, typename MemorySpace>
   static void
-  reinit(dealii::LinearAlgebra::distributed::Vector<Number, MemorySpace> & vector,
-         dealii::IndexSet const &                                          locally_owned_dofs,
-         dealii::IndexSet const &                                          ghost_dofs,
-         MPI_Comm const                                                    communicator)
+  reinit(dealii::LinearAlgebra::distributed::Vector<Number, MemorySpace> &  vector,
+         const std::shared_ptr<const dealii::Utilities::MPI::Partitioner> & partitioner)
   {
-    vector.reinit(locally_owned_dofs, ghost_dofs, communicator);
+    vector.reinit(partitioner);
   }
 
-  dealii::IndexSet owned_dofs;
-  dealii::IndexSet ghost_dofs;
-  MPI_Comm         mpi_communicator;
+  std::shared_ptr<const dealii::Utilities::MPI::Partitioner> partitioner;
+};
+
+
+/**
+ * A PartitionedVectorSpace whose vectors are zero in all constrained entries (Dirichlet boundary,
+ * hanging nodes). This is the representation the condensed system works in; apply
+ * AffineConstraints::distribute() only to get the full field, e.g. for output.
+ *
+ * Holds its own copy of the constraints, so it stays valid after the application is gone.
+ */
+template<typename VectorType>
+class ConstrainedVectorSpace : public PartitionedVectorSpace<VectorType>
+{
+public:
+  using Constraints = dealii::AffineConstraints<typename VectorType::value_type>;
+
+  ConstrainedVectorSpace(const dealii::IndexSet & locally_owned_dofs,
+                         const dealii::IndexSet & ghost_dofs,
+                         const MPI_Comm           communicator,
+                         const Constraints &      constraints)
+    : PartitionedVectorSpace<VectorType>(locally_owned_dofs, ghost_dofs, communicator),
+      constraints(constraints)
+  {
+  }
+
+  ConstrainedVectorSpace(std::shared_ptr<const dealii::Utilities::MPI::Partitioner> partitioner,
+                         const Constraints &                                        constraints)
+    : PartitionedVectorSpace<VectorType>(std::move(partitioner)), constraints(constraints)
+  {
+  }
+
+  void
+  make_admissible(VectorType & vector) const override
+  {
+    constraints.set_zero(vector);
+  }
+
+private:
+  Constraints constraints;
 };
 
 #endif /* APPLICATIONS_VECTOR_SPACE_H */

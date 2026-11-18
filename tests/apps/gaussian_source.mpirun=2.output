@@ -1,0 +1,61 @@
+
+DEAL:Q1::refinements: 3, dofs: 81
+DEAL:Q1:cg::Starting value 0.0293363
+DEAL:Q1:cg::Convergence step 1 value 3.60516e-14
+DEAL:Q1::energy: 1.85833001e-03
+DEAL:Q1::refinements: 4, dofs: 289
+DEAL:Q1:cg::Starting value 0.0153888
+DEAL:Q1:cg::Convergence step 1 value 7.74981e-14
+DEAL:Q1::energy: 1.89400454e-03
+DEAL:Q1::refinements: 5, dofs: 1089
+DEAL:Q1:cg::Starting value 0.00779259
+DEAL:Q1:cg::Convergence step 1 value 1.57943e-13
+DEAL:Q1::energy: 1.90319531e-03, order: 1.96
+DEAL:Q1::refinements: 6, dofs: 4225
+DEAL:Q1:cg::Starting value 0.00390914
+DEAL:Q1:cg::Convergence step 11 value 1.05433e-13
+DEAL:Q1::energy: 1.90551065e-03, order: 1.99
+DEAL:Q1::refinements: 7, dofs: 16641
+DEAL:Q1:cg::Starting value 0.00195627
+DEAL:Q1:cg::Convergence step 11 value 1.26709e-13
+DEAL:Q1::energy: 1.90609060e-03, order: 2.00
+DEAL:Q1::refinements: 8, dofs: 66049
+DEAL:Q1:cg::Starting value 0.000978368
+DEAL:Q1:cg::Convergence step 12 value 1.71037e-14
+DEAL:Q1::energy: 1.90623566e-03, order: 2.00
+DEAL:Q2::refinements: 3, dofs: 289
+DEAL:Q2:cg::Starting value 0.0172569
+DEAL:Q2:cg::Convergence step 1 value 1.09274e-13
+DEAL:Q2::energy: 1.90577815e-03
+DEAL:Q2::refinements: 4, dofs: 1089
+DEAL:Q2:cg::Starting value 0.00867967
+DEAL:Q2:cg::Convergence step 1 value 2.21810e-13
+DEAL:Q2::energy: 1.90625107e-03
+DEAL:Q2::refinements: 5, dofs: 4225
+DEAL:Q2:cg::Starting value 0.00434638
+DEAL:Q2:cg::Convergence step 22 value 1.55010e-13
+DEAL:Q2::energy: 1.90628194e-03, order: 3.94
+DEAL:Q2::refinements: 6, dofs: 16641
+DEAL:Q2:cg::Starting value 0.00217405
+DEAL:Q2:cg::Convergence step 23 value 1.70876e-13
+DEAL:Q2::energy: 1.90628389e-03, order: 3.98
+DEAL:Q2::refinements: 7, dofs: 66049
+DEAL:Q2:cg::Starting value 0.00108714
+DEAL:Q2:cg::Convergence step 24 value 7.88523e-14
+DEAL:Q2::energy: 1.90628401e-03, order: 4.00
+DEAL:Q3::refinements: 3, dofs: 625
+DEAL:Q3:cg::Starting value 0.0117393
+DEAL:Q3:cg::Convergence step 1 value 1.72280e-13
+DEAL:Q3::energy: 1.90627817e-03
+DEAL:Q3::refinements: 4, dofs: 2401
+DEAL:Q3:cg::Starting value 0.00587061
+DEAL:Q3:cg::Convergence step 31 value 3.02982e-13
+DEAL:Q3::energy: 1.90628392e-03
+DEAL:Q3::refinements: 5, dofs: 9409
+DEAL:Q3:cg::Starting value 0.00293536
+DEAL:Q3:cg::Convergence step 35 value 1.95237e-13
+DEAL:Q3::energy: 1.90628402e-03, order: 5.94
+DEAL:Q3::refinements: 6, dofs: 37249
+DEAL:Q3:cg::Starting value 0.00146770
+DEAL:Q3:cg::Convergence step 37 value 1.38431e-13
+DEAL:Q3::energy: 1.90628402e-03, order: 5.99

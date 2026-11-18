@@ -11,8 +11,6 @@ amax: ok
 lincomb: ok
 scal, axpy: ok
 copy is not changed by its original: ok
-complex inner: ok
-complex amax: ok
 gram_schmidt: ok
 gram_schmidt gramian: ok
 random: ok

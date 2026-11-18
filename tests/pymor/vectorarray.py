@@ -48,10 +48,6 @@ W.scal(-0.5)
 check('scal, axpy', W.to_numpy(), -0.5 * (data + 2.0 * data[:, [0]]))
 check('copy is not changed by its original', U.to_numpy(), data)
 
-C = U * (1 + 2j)
-check('complex inner', C.inner(U), (V * (1 + 2j)).inner(V))
-check('complex amax', np.array(C.amax()), np.array((V * (1 + 2j)).amax()))
-
 Q = gram_schmidt(U)
 check('gram_schmidt', Q.to_numpy(), gram_schmidt(V).to_numpy())
 check('gram_schmidt gramian', Q.gramian(), np.eye(3))

@@ -6,6 +6,7 @@
 #define DEALII_WITH_PYBIND_TESTS_H
 
 #include <deal.II/base/logstream.h>
+#include <deal.II/base/mpi.h>
 
 #include <fstream>
 #include <iomanip>
@@ -22,6 +23,16 @@ initlog(const bool console = false)
   deallogfile << std::setprecision(9);
   deallog.attach(deallogfile);
   deallog.depth_console(console ? 10 : 0);
+}
+
+// For tests that also run with mpirun: only rank 0 writes the file "output".
+inline void
+mpi_initlog(const bool console = false)
+{
+  if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+    initlog(console);
+  else
+    deallog.depth_console(0);
 }
 
 #endif // DEALII_WITH_PYBIND_TESTS_H

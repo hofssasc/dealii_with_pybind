@@ -2,9 +2,10 @@
 
 Both classes work for every vector type bound in dealii_core_module: they only
 use the methods `bind_vector` and `bind_vector_space` define for all of them.
+Only real vectors are supported.
 """
 
-from pymor.vectorarrays.list import ComplexifiedListVectorSpace, CopyOnWriteVector
+from pymor.vectorarrays.list import CopyOnWriteVector, ListVectorSpace
 
 
 class DealIIVector(CopyOnWriteVector):
@@ -54,7 +55,7 @@ class DealIIVector(CopyOnWriteVector):
         return self.space_impl.to_numpy(self.impl)
 
 
-class DealIIVectorSpace(ComplexifiedListVectorSpace):
+class DealIIVectorSpace(ListVectorSpace):
     """pyMOR vector space of the vectors of a C++ `VectorSpace`.
 
     Parameters
@@ -66,7 +67,7 @@ class DealIIVectorSpace(ComplexifiedListVectorSpace):
         See :attr:`~pymor.vectorarrays.interface.VectorSpace.id`.
     """
 
-    real_vector_type = DealIIVector
+    vector_type = DealIIVector
 
     def __init__(self, impl, id=None):
         self.__auto_init(locals())
@@ -81,13 +82,13 @@ class DealIIVectorSpace(ComplexifiedListVectorSpace):
     def __hash__(self):
         return hash((self.impl, self.id))
 
-    def real_zero_vector(self):
+    def zero_vector(self):
         return DealIIVector(self.impl.create_vector(), self.impl)
 
-    def real_make_vector(self, obj):
+    def make_vector(self, obj):
         return DealIIVector(obj, self.impl)
 
-    def real_vector_from_numpy(self, data, ensure_copy=False):
+    def vector_from_numpy(self, data, ensure_copy=False):
         # always copies; random and full vectors are built through here as well
         impl = self.impl.from_numpy(data)
         self.impl.make_admissible(impl)

@@ -9,7 +9,7 @@
 #include <deal.II/base/mpi.h>
 #include <deal.II/base/types.h>
 
-#include <vector_space.h>
+#include <interfaces/vector_space.h>
 
 #include <algorithm>
 #include <cmath>
@@ -35,9 +35,9 @@ namespace bindings
         // Agreed on by all ranks, so that either all of them throw or none enters the collective
         // operation that follows.
         template <typename VectorType>
-        void check_compatible(VectorSpace<VectorType> const& space, VectorType const& vector)
+        void check_compatible(const VectorSpace<VectorType>& space, const VectorType& vector)
         {
-            bool const compatible_here = vector.size() == space.n_dofs() &&
+            const bool compatible_here = vector.size() == space.n_dofs() &&
                 vector.locally_owned_size() == space.locally_owned_dofs().n_elements();
 
             if (dealii::Utilities::MPI::logical_or(!compatible_here, space.communicator()))
@@ -45,7 +45,7 @@ namespace bindings
         }
 
         template <typename VectorType>
-        Array<VectorType> to_numpy(VectorSpace<VectorType> const& space, VectorType const& vector)
+        Array<VectorType> to_numpy(const VectorSpace<VectorType>& space, const VectorType& vector)
         {
             check_compatible(space, vector);
 
@@ -54,7 +54,7 @@ namespace bindings
 
             // Every rank fills in what it owns, the sum over ranks assembles the whole vector.
             std::fill(values.begin(), values.end(), 0);
-            for (auto const i : space.locally_owned_dofs())
+            for (const auto i : space.locally_owned_dofs())
                 values[i] = vector(i);
             dealii::Utilities::MPI::sum<typename VectorType::value_type>(values, space.communicator(), values);
 
@@ -62,7 +62,7 @@ namespace bindings
         }
 
         template <typename VectorType>
-        std::shared_ptr<VectorType> from_numpy(VectorSpace<VectorType> const& space, Array<VectorType> const& data)
+        std::shared_ptr<VectorType> from_numpy(const VectorSpace<VectorType>& space, const Array<VectorType>& data)
         {
             if (data.ndim() != 1 || static_cast<dealii::types::global_dof_index>(data.shape(0)) != space.n_dofs())
                 throw py::value_error("Expected a one-dimensional array of length " +
@@ -70,26 +70,26 @@ namespace bindings
 
             // All ranks hold the whole array, each keeps the entries it owns.
             auto vector = space.create_vector();
-            auto const values = data.template unchecked<1>();
-            for (auto const i : space.locally_owned_dofs())
+            const auto values = data.template unchecked<1>();
+            for (const auto i : space.locally_owned_dofs())
                 (*vector)(i) = values(i);
 
             return vector;
         }
 
         template <typename VectorType>
-        Array<VectorType> dofs(VectorSpace<VectorType> const& space, VectorType const& vector, IndexArray const& indices)
+        Array<VectorType> dofs(const VectorSpace<VectorType>& space, const VectorType& vector, const IndexArray& indices)
         {
             check_compatible(space, vector);
 
-            auto const requested = indices.template unchecked<1>();
+            const auto requested = indices.template unchecked<1>();
             Array<VectorType> result(requested.shape(0));
             dealii::ArrayView<typename VectorType::value_type> values(result.mutable_data(), result.size());
 
             std::fill(values.begin(), values.end(), 0);
             for (py::ssize_t k = 0; k < requested.shape(0); ++k)
             {
-                auto const i = requested(k);
+                const auto i = requested(k);
                 if (i >= space.n_dofs())
                     throw py::index_error("index " + std::to_string(i) + " out of range for dimension " +
                                           std::to_string(space.n_dofs()));
@@ -105,22 +105,22 @@ namespace bindings
         // index, as with numpy.argmax.
         template <typename VectorType>
         std::pair<dealii::types::global_dof_index, typename VectorType::real_type>
-        amax(VectorSpace<VectorType> const& space, VectorType const& vector)
+        amax(const VectorSpace<VectorType>& space, const VectorType& vector)
         {
             check_compatible(space, vector);
 
             // Starts below every magnitude, so ranks that own nothing never win.
             typename VectorType::real_type local_max = -1;
             dealii::types::global_dof_index local_index = dealii::numbers::invalid_dof_index;
-            for (auto const i : space.locally_owned_dofs())
+            for (const auto i : space.locally_owned_dofs())
                 if (std::abs(vector(i)) > local_max)
                 {
                     local_max = std::abs(vector(i));
                     local_index = i;
                 }
 
-            auto const global_max = dealii::Utilities::MPI::max(local_max, space.communicator());
-            auto const global_index = dealii::Utilities::MPI::min(
+            const auto global_max = dealii::Utilities::MPI::max(local_max, space.communicator());
+            const auto global_index = dealii::Utilities::MPI::min(
                 local_max == global_max ? local_index : dealii::numbers::invalid_dof_index,
                 space.communicator());
 
@@ -129,7 +129,7 @@ namespace bindings
     }
 
     template <typename VectorType>
-    void bind_vector_space(py::module_& module, std::string const& name)
+    void bind_vector_space(py::module_& module, const std::string& name)
     {
         using Space = VectorSpace<VectorType>;
 
@@ -143,11 +143,11 @@ namespace bindings
                 .def("amax", &internal::amax<VectorType>, py::arg("vector"))
                 // A space is its C++ object: two spaces of the same dimension can still distribute
                 // their entries differently.
-                .def("__eq__", [](Space const& self, Space const& other)
+                .def("__eq__", [](const Space& self, const Space& other)
                     { return &self == &other; }, py::is_operator())
-                .def("__hash__", [](Space const& self)
-                    { return std::hash<Space const*>{}(&self); })
-                .def("__repr__", [name](Space const& self)
+                .def("__hash__", [](const Space& self)
+                    { return std::hash<const Space*>{}(&self); })
+                .def("__repr__", [name](const Space& self)
                     { return "<dealii_core_module." + name + " of dimension " +
                     std::to_string(self.n_dofs()) + ">";});
     }

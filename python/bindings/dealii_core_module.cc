@@ -2,9 +2,12 @@
 
 #include <deal.II/base/mpi.h>
 
-// Functions to register a dealii vector class and its VectorSpace with pybind11
+// Functions to register a dealii vector class, its VectorSpace, Operator and StationaryModel
+// with pybind11
 #include "dealii_vectors.h"
 #include "dealii_vector_space.h"
+#include "dealii_operator.h"
+#include "dealii_stationary_model.h"
 // Currently registered vector types
 #include <deal.II/lac/vector.h>
 #include <deal.II/lac/la_parallel_vector.h>
@@ -14,27 +17,36 @@ namespace py = pybind11;
 
 namespace
 {
+#ifdef DEAL_II_WITH_MPI
+    void finalize_mpi()
+    {
+        int finalized = 0;
+        MPI_Finalized(&finalized);
+        if (!finalized)
+            MPI_Finalize();
+    }
+#endif
+
     // Every rank runs the same script (SPMD), so MPI has to be initialized before the first
-    // collective operation. Something else may have done it already, e.g. mpi4py when pyMOR is
-    // imported first; otherwise initialize it here and finalize it at interpreter exit.
+    // collective operation. Something else may have done it already, e.g. mpi4py.
+    //
+    // Finalizing has to wait until Python has destroyed the deal.II objects it holds: a
+    // parallel::distributed::Triangulation, for instance, frees its communicator in its destructor.
+    // Python's atexit handlers run before that, Py_AtExit() functions at the very end of the
+    // interpreter shutdown. mpi4py must therefore not finalize itself (dealii_pymor makes sure of
+    // that for pyMOR, which otherwise asks mpi4py to).
     void ensure_mpi_initialized()
     {
 #ifdef DEAL_II_WITH_MPI
         int initialized = 0;
         MPI_Initialized(&initialized);
-        if (initialized)
-            return;
+        if (!initialized)
+        {
+            int provided = 0;
+            MPI_Init_thread(nullptr, nullptr, MPI_THREAD_SERIALIZED, &provided);
+        }
 
-        int provided = 0;
-        MPI_Init_thread(nullptr, nullptr, MPI_THREAD_SERIALIZED, &provided);
-
-        py::module_::import("atexit").attr("register")(py::cpp_function([]()
-            {
-                int finalized = 0;
-                MPI_Finalized(&finalized);
-                if (!finalized)
-                    MPI_Finalize();
-            }));
+        Py_AtExit(&finalize_mpi);
 #endif
     }
 }
@@ -55,4 +67,10 @@ PYBIND11_MODULE(dealii_core_module, m, py::mod_gil_not_used()) {
 
     bindings::bind_vector_space<dealii::Vector<double>>(m, "VectorSpace");
     bindings::bind_vector_space<dealii::LinearAlgebra::distributed::Vector<double>>(m, "DistributedVectorSpace");
+
+    bindings::bind_operator<dealii::Vector<double>>(m, "Operator");
+    bindings::bind_operator<dealii::LinearAlgebra::distributed::Vector<double>>(m, "DistributedOperator");
+
+    bindings::bind_stationary_model<dealii::Vector<double>>(m, "StationaryModel");
+    bindings::bind_stationary_model<dealii::LinearAlgebra::distributed::Vector<double>>(m, "DistributedStationaryModel");
 }

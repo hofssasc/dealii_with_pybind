@@ -6,7 +6,12 @@ dealii_pybind_add_module(example
   LINK    applications
   )
 
-# applications provides the VectorSpace interface (vector_space.h)
+dealii_pybind_add_module(gaussian_source
+  SOURCES bindings/gaussian_source.cc
+  LINK    applications
+  )
+
+# applications provides the interfaces (apps/include/interfaces)
 dealii_pybind_add_module(dealii_core_module
   SOURCES bindings/dealii_core_module.cc
   LINK    dealii::dealii applications

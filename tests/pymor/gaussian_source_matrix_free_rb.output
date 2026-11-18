@@ -1,0 +1,25 @@
+
+Construct Poisson operator ...
+
+
+Continuous Galerkin finite element discretization:
+
+  degree of 1D polynomials:                  1
+  number of dofs per cell:                   4
+  number of dofs (total):                    1089
+
+... done!
+
+Setup Poisson operator ...
+
+... done!
+parameters: {center: 2}, dimension: 1089
+relative residual below 1e-9: True
+h1_0_semi norm of the solution: 4.362563e-02
+visualized: solution_0.pvtu
+snapshots: 36, POD modes: 36
+snapshot reproduced (relative error below 1e-8): True
+reduced dimension  4: largest relative error 3.3e-01
+reduced dimension  8: largest relative error 1.0e-01
+reduced dimension 16: largest relative error 3.4e-02
+reduced dimension 32: largest relative error 3.7e-03

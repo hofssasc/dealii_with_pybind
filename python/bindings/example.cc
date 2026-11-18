@@ -1,6 +1,6 @@
 #include <pybind11/pybind11.h>
-#include <code.h>
-#include <vector_space.h>
+#include <implementations/code.h>
+#include <interfaces/vector_space.h>
 
 #include <deal.II/base/mpi.h>
 #include <deal.II/lac/la_parallel_vector.h>
