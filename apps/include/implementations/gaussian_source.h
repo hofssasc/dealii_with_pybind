@@ -17,6 +17,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -54,6 +55,9 @@ public:
   std::shared_ptr<VectorType>
   assemble_rhs(const ParameterValues & mu) const override;
 
+  std::shared_ptr<const RestrictedRhs>
+  restricted_rhs(const std::vector<dealii::types::global_dof_index> & dofs) const override;
+
   std::map<std::string, std::shared_ptr<const Operator<VectorType>>>
   products() const override;
 
@@ -77,6 +81,41 @@ private:
 
   std::shared_ptr<const ConstrainedVectorSpace<VectorType>> space;
   std::shared_ptr<const TrilinosMatrixOperator>             laplace_operator;
+};
+
+/**
+ * The right-hand side of GaussianSource at a few dofs: the source is only integrated over the
+ * locally owned cells that contain one of the dofs, the contributions are then summed over the
+ * ranks. GaussianSourceMatrixFree has the same right-hand side and uses it as well.
+ *
+ * Without hanging nodes, the entry of an unconstrained dof is the sum of the contributions of the
+ * cells around it; both are checked. The boundary dofs are the constrained ones, f(mu) is zero
+ * there, so empirical interpolation never chooses them.
+ */
+template<int dim>
+class GaussianSourceRestrictedRhs : public RestrictedRhs
+{
+public:
+  // Refers to the cells of dof_handler, which has to outlive this object.
+  GaussianSourceRestrictedRhs(const dealii::DoFHandler<dim> &                      dof_handler,
+                              const dealii::AffineConstraints<double> &            constraints,
+                              const double                                         width,
+                              const std::vector<dealii::types::global_dof_index> & dofs,
+                              const MPI_Comm                                       communicator);
+
+  std::vector<double>
+  evaluate(const ParameterValues & mu) const override;
+
+private:
+  const dealii::FiniteElement<dim> & fe;
+  double                             width;
+  std::size_t                        n_dofs;
+  MPI_Comm                           mpi_communicator;
+
+  // The cells with one of the dofs, each with the pairs (dof index on the cell, position in dofs).
+  std::vector<std::pair<typename dealii::DoFHandler<dim>::active_cell_iterator,
+                        std::vector<std::pair<unsigned int, std::size_t>>>>
+    cells;
 };
 
 #endif /* APPLICATIONS_GAUSSIAN_SOURCE_H */

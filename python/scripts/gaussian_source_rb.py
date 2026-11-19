@@ -5,7 +5,8 @@
 import dealii_pymor  # before pymor, see dealii_pymor/__init__.py
 from pymor.algorithms.pod import pod
 from pymor.core.logger import set_log_levels
-from pymor.reductors.basic import StationaryRBReductor
+from pymor.algorithms.ei import ei_greedy
+from pymor.operators.ei import EmpiricalInterpolatedOperator
 
 import dealii_core_module as dealii
 import gaussian_source
@@ -36,6 +37,8 @@ def run(model, filename):
     log(f'h1_0_semi norm of the solution: {fom.h1_0_semi_norm(U)[0]:.6e}')
     log(f'visualized: {fom.visualize(U, filename=f"output/{filename}", legend="u")}')
 
+
+    # ------------------Reduction of the Poisson Operator ---------------------------
     # Define parameter space such that source doesnt leave the domain and uniformly sample a grid of 6x6.
     parameter_space = fom.parameters.space(0.2, 0.8)
     training_set = parameter_space.sample_uniformly(6)
@@ -49,24 +52,44 @@ def run(model, filename):
 
     log(f'visualized: {fom.visualize(basis, filename=f"output/{filename}_modes", legend=[f"mode_{i}" for i in range(1, len(basis) + 1)])}')
 
-    # The fom is needed to project via the apply function, simplified somthing like:
-    # basis_i.inner(fom.apply(basis_j)) has to be done for each reduced matrix entry ij.
-    # The h1 norm is also projected down for use in reconstruct and error estimation.
-    reductor = StationaryRBReductor(fom, RB=basis, product=h1)
+
+
+    # ------------------Emiprical Interpolation of the Right-Hand Side ---------------------------
+    # The right-hand side is non-affine, so we use empirical interpolation to approximate it
+    # with a reduced basis and interpolation dofs. The reduced basis is obtained from snapshots of
+    # the right-hand side on a finer grid of centers, since assembling the rhs is cheaper.
+    rhs_training_set = parameter_space.sample_uniformly(12)
+    rhs_snapshots = fom.rhs.range.empty()
+    for mu in rhs_training_set:
+        rhs_snapshots.append(fom.rhs.as_range_array(mu))
+    dofs, collateral_basis, _ = ei_greedy(rhs_snapshots, max_interpolation_dofs=64)
+    log(f'right-hand side snapshots: {len(rhs_snapshots)}, interpolation dofs: {len(dofs)}')
 
     def relative_error(rom, mu, u):
         return ((u - reductor.reconstruct(rom.solve(mu))).norm(h1) / u.norm(h1))[0]
 
-    # Galerkin projection reproduces every snapshot once all modes are used.
-    rom = reductor.reduce()
-    log(f'snapshot reproduced (relative error below 1e-8): {relative_error(rom, training_set[7], snapshots[7]) < 1e-8}')
 
+
+    # ------------------Reduced Basis and Empirical Interpolation Error Estimation ---------------------------
     test_set = parameter_space.sample_randomly(10)
     solutions = [fom.solve(mu) for mu in test_set]
-    for n in (4, 8, 16, 32):
-        # Executes reduction with first n POD basis vectors
-        rom = reductor.reduce(n)
-        log(f'reduced dimension {n:2d}: largest relative error {max(relative_error(rom, mu, u) for mu, u in zip(test_set, solutions)):.1e}')
+    rhs_test = [fom.rhs.as_range_array(mu) for mu in test_set]
+
+    # No need to recompute dofs and collateral basis, they are hierarchically ordered and the first M are the interpolation with M dofs.
+    for M in (16, 32, 64):
+        rhs_ei = EmpiricalInterpolatedOperator(fom.rhs, dofs[:M], collateral_basis[:M], triangular=True)
+        for n in (4, 8, 16, 32):
+            # Note that we use a custom reductor instead of the standard StationaryRBReductor,
+            # since we need to project the non-affine right-hand side.
+            # Generally for a StationaryRBReductor, the fom is needed to project via the apply function, simply said
+            # something like basis_i.inner(fom.apply(basis_j)) has to be done for each reduced matrix entry ij.
+            # The h1 norm is also projected down for use in reconstruct and error estimation.
+            reductor = dealii_pymor.DealIIStationaryRBReductor(fom.with_(rhs=rhs_ei), RB=basis, product=h1)
+            rom = reductor.reduce(n)
+
+            rhs_error = max(((f - rhs_ei.as_range_array(mu)).norm() / f.norm())[0] for mu, f in zip(test_set, rhs_test))
+            log(f'interpolation dofs {M:2d}: largest relative error of the right-hand side {rhs_error:.1e}, '
+                f'reduced dimension {n:2d}: largest relative error {max(relative_error(rom, mu, u) for mu, u in zip(test_set, solutions)):.1e}')
 
 
 if __name__ == '__main__':

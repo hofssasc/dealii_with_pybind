@@ -21,7 +21,7 @@ GaussianSourceMatrixFree<dim>::GaussianSourceMatrixFree(const unsigned int n_ref
                                                         const unsigned int degree,
                                                         const double       width,
                                                         const MPI_Comm     communicator)
-  : mpi_communicator(communicator), center(std::make_shared<dealii::Point<dim>>())
+  : mpi_communicator(communicator), width(width), center(std::make_shared<dealii::Point<dim>>())
 {
   // Continuous Q_k elements on a uniformly refined, distributed mesh, as in GaussianSource.
   param.right_hand_side             = true;
@@ -77,7 +77,7 @@ GaussianSourceMatrixFree<dim>::GaussianSourceMatrixFree(const unsigned int n_ref
 
   auto field_functions             = std::make_shared<ExaDG::Poisson::FieldFunctions<dim>>();
   field_functions->right_hand_side = std::make_shared<dealii::ScalarFunctionFromFunctionObject<dim>>(
-    [center = center, width](const dealii::Point<dim> & x) {
+    [center = center, width = width](const dealii::Point<dim> & x) {
       return std::exp(-(x - *center).norm_square() / (width * width));
     });
 
@@ -140,6 +140,15 @@ GaussianSourceMatrixFree<dim>::assemble_rhs(const ParameterValues & mu) const
   pde_operator->rhs(*rhs);
 
   return rhs;
+}
+
+template<int dim>
+std::shared_ptr<const RestrictedRhs>
+GaussianSourceMatrixFree<dim>::restricted_rhs(
+  const std::vector<dealii::types::global_dof_index> & dofs) const
+{
+  return std::make_shared<const GaussianSourceRestrictedRhs<dim>>(
+    pde_operator->get_dof_handler(), constraints, width, dofs, mpi_communicator);
 }
 
 template<int dim>

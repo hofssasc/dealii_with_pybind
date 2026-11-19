@@ -34,8 +34,15 @@ else:
 import dealii_core_module  # noqa: E402, F401  initializes MPI
 
 from dealii_pymor.models import DealIIVisualizer, stationary_model  # noqa: E402
-from dealii_pymor.operators import DealIIOperator, DealIIRhsOperator, DealIISolver  # noqa: E402
+from dealii_pymor.operators import (  # noqa: E402
+    DealIIOperator,
+    DealIIRestrictedRhsOperator,
+    DealIIRhsOperator,
+    DealIISolver,
+)
+from dealii_pymor.reductors import DealIIStationaryRBReductor  # noqa: E402
 from dealii_pymor.vectorarray import DealIIVector, DealIIVectorSpace  # noqa: E402
 
-__all__ = ['DealIIOperator', 'DealIIRhsOperator', 'DealIISolver', 'DealIIVector', 'DealIIVectorSpace',
-           'DealIIVisualizer', 'stationary_model']
+__all__ = ['DealIIOperator', 'DealIIRestrictedRhsOperator', 'DealIIRhsOperator', 'DealIISolver',
+           'DealIIStationaryRBReductor', 'DealIIVector', 'DealIIVectorSpace', 'DealIIVisualizer',
+           'stationary_model']

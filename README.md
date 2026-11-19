@@ -50,6 +50,7 @@ The same four concepts appear on every layer:
 | vector space | `VectorSpace<VectorType>`           | `VectorSpace`, `DistributedVectorSpace`   | `DealIIVectorSpace`                  | `ListVectorSpace`               |
 | operator     | `Operator<VectorType>`              | `Operator`, `DistributedOperator`         | `DealIIOperator`, `DealIISolver`     | `ListVectorArrayOperatorBase`   |
 | model        | `StationaryModel<VectorType>`       | `StationaryModel`, `DistributedStationaryModel` | `stationary_model()`, `DealIIRhsOperator`, `DealIIVisualizer` | `StationaryModel` |
+| restricted right-hand side | `RestrictedRhs`           | `RestrictedRhs`                           | `DealIIRestrictedRhsOperator`        | `Operator` (from `restricted()`) |
 
 pyMOR's *list vector arrays* are lists of single vectors. Each entry here is
 one deal.II vector, and pyMOR's linear algebra on the array calls deal.II's
@@ -137,14 +138,49 @@ parameters in any way. Each application implements this once.
 | `parameters()`                 | parameter names and their number of components, e.g. `{"center": 2}` |
 | `system_operator()`            | `A`; must have an inverse |
 | `assemble_rhs(mu)`             | `f(mu)` as a new vector |
+| `restricted_rhs(dofs)`         | `f(mu)` at a few dofs only, for empirical interpolation (below); `nullptr` by default |
 | `products()`                   | named inner products; pyMOR adds `<name>_product` and `<name>_norm` to the model; none by default |
 | `write_vtu(directory, basename, fields, names)` | write vectors for ParaView; used by pyMOR's `visualize`; throws by default |
 
-pyMOR cannot see how `f` depends on `mu`. When reducing, it therefore
-evaluates the full `assemble_rhs` for every parameter and projects the result,
-and logs a warning ("inefficient generic projection"). This is correct but
-costs one assembly per reduced solve. Making it efficient (empirical
-interpolation, or an affine decomposition of `f`) is a later step.
+### Empirical interpolation of the right-hand side
+
+pyMOR cannot see how `f` depends on `mu`. Without help, every reduced solve
+assembles the full `f(mu)` and projects it, and pyMOR logs a warning
+("inefficient generic projection"). This is correct, but costs an assembly on
+the full mesh per reduced solve.
+
+Empirical interpolation (EI) removes this cost:
+
+- **offline**, `ei_greedy` (or `deim`) picks M interpolation dofs and M
+  collateral basis vectors from snapshots of `f(mu)`. `f(mu)` is then
+  approximated by the combination of basis vectors that matches it at the
+  interpolation dofs;
+- **online**, only the M entries of `f(mu)` at the interpolation dofs are
+  computed. Nothing depends on the size of the mesh any more.
+
+`restricted_rhs(dofs)` provides these entries. It returns a `RestrictedRhs`,
+set up once for the dofs, whose `evaluate(mu)` computes `f(mu)` at them, e.g.
+by integrating only over the cells around them. This is pyMOR's
+`Operator.restricted()` on the C++ side: `DealIIRhsOperator.restricted()`
+calls it, and pyMOR's `EmpiricalInterpolatedOperator` uses the result. A model
+that returns `nullptr` can still be interpolated, but every evaluation then
+assembles the full `f(mu)`.
+
+```python
+from pymor.algorithms.ei import ei_greedy
+from pymor.operators.ei import EmpiricalInterpolatedOperator
+
+dofs, collateral_basis, _ = ei_greedy(rhs_snapshots, max_interpolation_dofs=64)
+rhs_ei = EmpiricalInterpolatedOperator(fom.rhs, dofs, collateral_basis, triangular=True)
+reductor = dealii_pymor.DealIIStationaryRBReductor(fom.with_(rhs=rhs_ei), RB=RB, product=h1)
+```
+
+Reduce with `DealIIStationaryRBReductor` instead of pyMOR's
+`StationaryRBReductor`. pyMOR's reductor projects the right-hand side, an
+operator from R¹, without a basis for R¹. pyMOR's efficient projection of an
+interpolated operator needs one, so it falls back to a generic projection that
+works in the full space again. `DealIIStationaryRBReductor` projects with the
+identity of R¹ instead.
 
 ## 3. Implementations (`apps/include/implementations`, `apps/source`)
 
@@ -160,7 +196,9 @@ These are compiled into the shared library `libapplications.so`:
   `u = 0` on the boundary and the parameter `center`. It uses a distributed
   mesh (`parallel::distributed::Triangulation`), Q_k elements, a
   `ConstrainedVectorSpace` and a `TrilinosMatrixOperator`, and has the product
-  `h1_0_semi`.
+  `h1_0_semi`. Its restricted right-hand side, `GaussianSourceRestrictedRhs`,
+  integrates the source only over the locally owned cells around the given
+  dofs and sums over the ranks. It requires a mesh without hanging nodes.
 - **`ExaDGPoissonOperator<dim>`**: a building block. It wraps the
   `Poisson::Operator` of ExaDG as an `Operator`: `apply` is its matrix-free
   `vmult`, and `apply_inverse` is its `solve` (CG with the preconditioner set
@@ -170,7 +208,8 @@ These are compiled into the shared library `libapplications.so`:
   matrix-free solver, CG preconditioned by polynomial and geometric multigrid.
   The discretization is the same (continuous Q_k elements, same mesh), so both
   models have the same discrete solution up to the solver tolerance. Only the
-  operator and the solver differ.
+  operator and the solver differ. ExaDG has no restricted assembly, so it uses
+  `GaussianSourceRestrictedRhs` on ExaDG's `DoFHandler` (same quadrature).
 - `code.h`: a placeholder function for the testsuite setup.
 
 ### Which part of ExaDG is used
@@ -191,6 +230,7 @@ onto the interfaces:
 | `Operator::apply`, `apply_inverse` | `vmult`, `solve` |
 | `assemble_rhs(mu)` | `rhs`, after setting the parameter on the right-hand side function |
 | `VectorSpace` | the vector partitioner of `get_matrix_free()` |
+| `restricted_rhs(dofs)` | none, `GaussianSourceRestrictedRhs` on `get_dof_handler()` |
 
 `GaussianSourceMatrixFree` builds the operator's inputs directly in its
 constructor, with ExaDG's helpers in `GridUtilities`: `Parameters`, grid,
@@ -239,8 +279,9 @@ does not enforce `const`, so it only documents intent.
 | module           | classes |
 |------------------|---------|
 | `vectorarray.py` | `DealIIVector` (one deal.II vector), `DealIIVectorSpace` (a bound `VectorSpace`) |
-| `operators.py`   | `DealIIOperator` (a bound `Operator`), `DealIISolver` (its `apply_inverse`), `DealIIRhsOperator` (`assemble_rhs` as a pyMOR operator) |
+| `operators.py`   | `DealIIOperator` (a bound `Operator`), `DealIISolver` (its `apply_inverse`), `DealIIRhsOperator` (`assemble_rhs` as a pyMOR operator), `DealIIRestrictedRhsOperator` (a bound `RestrictedRhs`, from `DealIIRhsOperator.restricted()`) |
 | `models.py`      | `stationary_model()` (builds pyMOR's `StationaryModel`), `DealIIVisualizer` (`write_vtu`) |
+| `reductors.py`   | `DealIIStationaryRBReductor` (pyMOR's `StationaryRBReductor`, efficient for an interpolated right-hand side) |
 
 Import `dealii_pymor` before `pymor` (see [section 5](#5-parallel-execution-spmd)):
 
@@ -254,7 +295,7 @@ fom.visualize(u, filename='solution')
 ```
 
 `tests/pymor/gaussian_source_rb.py` is a complete example with POD and
-reduction.
+reduction, `tests/pymor/gaussian_source_ei.py` adds empirical interpolation.
 
 
 ## 5. Parallel execution (SPMD)
@@ -410,6 +451,8 @@ Outputs are compared with `numdiff`, using deal.II's tolerances.
 | `apps/gaussian_source_matrix_free` | the same for `GaussianSourceMatrixFree`: dofs and energies as in `apps/gaussian_source`, multigrid iterations |
 | `pymor/gaussian_source_rb`    | full-order solve, visualization, POD, and reduced basis errors |
 | `pymor/gaussian_source_matrix_free_rb` | the same for the matrix-free model (reuses `run()` of `gaussian_source_rb.py`) |
+| `apps/gaussian_source_restricted_rhs` | the restricted right-hand side of both models equals the assembled one at all interior dofs, Q1–Q3, also on 2 ranks |
+| `pymor/gaussian_source_ei` | reduced basis with an interpolated right-hand side: errors for 16, 32, 64 interpolation dofs, efficient projection |
 
 **`mpirun` tests:** they are started with deal.II's `DEAL_II_MPIEXEC`. If
 deal.II was configured with the `mpiexec` of a different MPI than the one it
@@ -426,5 +469,13 @@ PYTHONPATH=build/python:python mpirun -n 2 $(which python) tests/pymor/gaussian_
 
 ## 8. Next steps
 
-- An efficient reduction of the parameter-dependent right-hand side
-  (empirical interpolation).
+- System operators that depend on the parameters in a non-affine way, or
+  nonlinear ones. They need a parameter-dependent operator interface. Its
+  restriction will have the same shape as `RestrictedRhs`, plus the source
+  dofs the evaluation reads.
+- `GaussianSourceRestrictedRhs` on adaptive meshes: with hanging nodes, it
+  also needs the cells of the dofs that are constrained to an interpolation
+  dof.
+- The projection problem behind `DealIIStationaryRBReductor` could be
+  reported to pyMOR: its rule could treat a missing source basis of R¹ as the
+  identity.

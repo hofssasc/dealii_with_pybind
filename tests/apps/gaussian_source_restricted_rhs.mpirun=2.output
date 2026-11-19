@@ -1,0 +1,7 @@
+
+DEAL::matrix-based Q1: dofs 81, restricted to 49, same entries: true
+DEAL::matrix-based Q2: dofs 289, restricted to 225, same entries: true
+DEAL::matrix-based Q3: dofs 625, restricted to 529, same entries: true
+DEAL::matrix-free Q1: dofs 81, restricted to 49, same entries: true
+DEAL::matrix-free Q2: dofs 289, restricted to 225, same entries: true
+DEAL::matrix-free Q3: dofs 625, restricted to 529, same entries: true

@@ -10,6 +10,7 @@
 #include <exadg/poisson/user_interface/parameters.h>
 
 #include <implementations/exadg_poisson_operator.h>
+#include <implementations/gaussian_source.h>
 #include <interfaces/stationary_model.h>
 #include <interfaces/vector_space.h>
 
@@ -28,7 +29,8 @@
  * polynomial and geometric multigrid. The discretization is the same (continuous Q_k elements on
  * the same mesh), so both models have the same discrete solution up to the solver tolerance.
  *
- * The only product is "h1_0_semi", the Laplacian itself.
+ * The only product is "h1_0_semi", the Laplacian itself. The restricted right-hand side is the one
+ * of GaussianSource (GaussianSourceRestrictedRhs), as ExaDG has no restricted assembly.
  */
 template<int dim>
 class GaussianSourceMatrixFree
@@ -54,6 +56,9 @@ public:
   std::shared_ptr<VectorType>
   assemble_rhs(const ParameterValues & mu) const override;
 
+  std::shared_ptr<const RestrictedRhs>
+  restricted_rhs(const std::vector<dealii::types::global_dof_index> & dofs) const override;
+
   std::map<std::string, std::shared_ptr<const Operator<VectorType>>>
   products() const override;
 
@@ -65,6 +70,7 @@ public:
 
 private:
   MPI_Comm mpi_communicator;
+  double   width;
 
   // ExaDG's operator keeps a reference to its parameters.
   ExaDG::Poisson::Parameters param;

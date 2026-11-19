@@ -1,5 +1,6 @@
 """pyMOR operators of C++ `Operators` and `StationaryModels`."""
 
+import numpy as np
 from pymor.operators.interface import Operator
 from pymor.operators.list import ListVectorArrayOperatorBase
 from pymor.solvers.list import ListVectorArrayBasedSolver
@@ -50,4 +51,29 @@ class DealIIRhsOperator(Operator):
         assert U in self.source
         assert self.parameters.assert_compatible(mu)
         F = self.range.make_array([self.model.assemble_rhs(mu)])
+        return F.lincomb(U.to_numpy())
+
+    def restricted(self, dofs):
+        """For pyMOR's `EmpiricalInterpolatedOperator`: f(μ) only at `dofs`, see `restricted_rhs`
+        of the C++ `StationaryModel`. The source R^1 is kept, as its only dof 0."""
+        impl = self.model.restricted_rhs(dofs)
+        if impl is None:
+            raise NotImplementedError
+        return DealIIRestrictedRhsOperator(impl, len(dofs), self.parameters), np.array([0])
+
+
+class DealIIRestrictedRhsOperator(Operator):
+    """`DealIIRhsOperator` restricted to a few dofs, see `DealIIRhsOperator.restricted`."""
+
+    linear = True
+
+    def __init__(self, impl, n_dofs, parameters_own, name=None):
+        self.__auto_init(locals())
+        self.source = NumpyVectorSpace(1)
+        self.range = NumpyVectorSpace(n_dofs)
+
+    def apply(self, U, mu=None):
+        assert U in self.source
+        assert self.parameters.assert_compatible(mu)
+        F = self.range.make_array(np.array(self.impl.evaluate(mu))[:, np.newaxis])
         return F.lincomb(U.to_numpy())

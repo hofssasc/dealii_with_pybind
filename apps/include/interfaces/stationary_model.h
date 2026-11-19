@@ -2,6 +2,7 @@
 #define APPLICATIONS_STATIONARY_MODEL_H
 
 #include <deal.II/base/exceptions.h>
+#include <deal.II/base/types.h>
 
 #include <interfaces/operator.h>
 #include <interfaces/vector_space.h>
@@ -13,6 +14,23 @@
 
 // Parameter values by name, e.g. {"center": {0.3, 0.6}}; pyMOR's Mu.
 using ParameterValues = std::map<std::string, std::vector<double>>;
+
+/**
+ * The right-hand side f(mu) at a fixed set of dofs, for its empirical interpolation: the reduced
+ * model only needs these few entries of f(mu) for every new mu. Created once for the interpolation
+ * dofs by StationaryModel::restricted_rhs(); an evaluation must not get more expensive as the mesh
+ * is refined.
+ */
+class RestrictedRhs
+{
+public:
+  virtual ~RestrictedRhs() = default;
+
+  // The entries of f(mu) at the dofs, in their order. Collective, the result is the same on every
+  // rank.
+  virtual std::vector<double>
+  evaluate(const ParameterValues & mu) const = 0;
+};
 
 /**
  * The components of a stationary problem
@@ -43,6 +61,15 @@ public:
   // f(mu), a new vector in solution_space().
   virtual std::shared_ptr<VectorType>
   assemble_rhs(const ParameterValues & mu) const = 0;
+
+  // f(mu) at the given global dofs, for empirical interpolation. Collective, with the same dofs on
+  // every rank. The result may refer to the model, which has to outlive it. Optional: without it
+  // (nullptr), pyMOR assembles all of f(mu) for every mu, with the same result but no speedup.
+  virtual std::shared_ptr<const RestrictedRhs>
+  restricted_rhs(const std::vector<dealii::types::global_dof_index> & /*dofs*/) const
+  {
+    return nullptr;
+  }
 
   // Inner products on solution_space() by name; pyMOR adds a <name>_product and a <name>_norm to
   // the model for each, e.g. h1_0_semi_product and h1_0_semi_norm.
