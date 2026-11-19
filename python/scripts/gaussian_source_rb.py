@@ -11,6 +11,8 @@ from pymor.operators.ei import EmpiricalInterpolatedOperator
 import dealii_core_module as dealii
 import gaussian_source
 
+import time
+
 
 def log(*args):
     if dealii.this_mpi_process() == 0:
@@ -43,12 +45,18 @@ def run(model, filename):
     parameter_space = fom.parameters.space(0.2, 0.8)
     training_set = parameter_space.sample_uniformly(6)
     snapshots = fom.solution_space.empty()
+    start = time.time()
     for mu in training_set:
         snapshots.append(fom.solve(mu))
+    end = time.time()
+    log(f'time for snapshots: {end - start:.2f} s')
 
     # Minimize reconstruction error in the H1 norm (alternative could be L2)
+    start = time.time()
     basis, _ = pod(snapshots, product=h1, rtol=0, atol=0, l2_err=0)
-    log(f'snapshots: {len(snapshots)}, POD modes: {len(basis)}')
+    end = time.time()
+    log(f'time for POD: {end - start:.2f} s')
+    log(f'snapshots: {len(snapshots)}, POD modes: {len(basis)}' )
 
     log(f'visualized: {fom.visualize(basis, filename=f"output/{filename}_modes", legend=[f"mode_{i}" for i in range(1, len(basis) + 1)])}')
 
@@ -60,9 +68,16 @@ def run(model, filename):
     # the right-hand side on a finer grid of centers, since assembling the rhs is cheaper.
     rhs_training_set = parameter_space.sample_uniformly(12)
     rhs_snapshots = fom.rhs.range.empty()
+    start = time.time()
     for mu in rhs_training_set:
         rhs_snapshots.append(fom.rhs.as_range_array(mu))
+    end = time.time()
+    log(f'time for right-hand side snapshots: {end - start:.2f} s')
+
+    start = time.time()
     dofs, collateral_basis, _ = ei_greedy(rhs_snapshots, max_interpolation_dofs=64)
+    end = time.time()
+    log(f'time for empirical interpolation: {end - start:.2f} s')
     log(f'right-hand side snapshots: {len(rhs_snapshots)}, interpolation dofs: {len(dofs)}')
 
     def relative_error(rom, mu, u):
@@ -75,7 +90,8 @@ def run(model, filename):
     solutions = [fom.solve(mu) for mu in test_set]
     rhs_test = [fom.rhs.as_range_array(mu) for mu in test_set]
 
-    # No need to recompute dofs and collateral basis, they are hierarchically ordered and the first M are the interpolation with M dofs.
+    # No need to recompute dofs and collateral basis, they are hierarchically ordered and taking the first M
+    # is equivalent to performing ei_greedy with max_interpolation_dofs=M. The reduced basis is also hierarchically ordered.
     for M in (16, 32, 64):
         rhs_ei = EmpiricalInterpolatedOperator(fom.rhs, dofs[:M], collateral_basis[:M], triangular=True)
         for n in (4, 8, 16, 32):
@@ -86,8 +102,11 @@ def run(model, filename):
             # The h1 norm is also projected down for use in reconstruct and error estimation.
             reductor = dealii_pymor.DealIIStationaryRBReductor(fom.with_(rhs=rhs_ei), RB=basis, product=h1)
             rom = reductor.reduce(n)
-
+            start = time.time()
             rhs_error = max(((f - rhs_ei.as_range_array(mu)).norm() / f.norm())[0] for mu, f in zip(test_set, rhs_test))
+            end = time.time()
+            log(f'time for error estimation: {end - start:.2f} s')
+
             log(f'interpolation dofs {M:2d}: largest relative error of the right-hand side {rhs_error:.1e}, '
                 f'reduced dimension {n:2d}: largest relative error {max(relative_error(rom, mu, u) for mu, u in zip(test_set, solutions)):.1e}')
 
