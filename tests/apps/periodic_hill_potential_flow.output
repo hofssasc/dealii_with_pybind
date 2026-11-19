@@ -1,0 +1,11 @@
+
+DEAL::dofs: 7105
+DEAL::flat channel, phi_tilde = 0: true
+DEAL::hill width 1.93, mapping degree 1: relative difference 0.00258
+DEAL::hill width 1.93, mapping degree 2: relative difference 1.91e-05
+DEAL::hill width 1.93, mapping degree 3: relative difference 4.54e-06
+DEAL::hill width 1.93, mapping degree 5: relative difference 4.54e-06
+DEAL::hill width 2.00, mapping degree 1: relative difference 0.00240
+DEAL::hill width 2.00, mapping degree 2: relative difference 1.69e-05
+DEAL::hill width 2.00, mapping degree 3: relative difference 3.29e-09
+DEAL::hill width 2.00, mapping degree 5: relative difference 7.52e-14

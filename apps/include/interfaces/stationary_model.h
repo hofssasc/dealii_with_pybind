@@ -33,13 +33,35 @@ public:
 };
 
 /**
+ * The rows of a system operator A(mu) at a fixed set of dofs, for its empirical interpolation. The
+ * rows only depend on the entries of u at a few source dofs, so the reduced model only needs the
+ * small matrix of A(mu) restricted to the dofs and the source dofs for every new mu. Created once
+ * for the interpolation dofs by StationaryModel::restricted_system_operator(); an evaluation must
+ * not get more expensive as the mesh is refined.
+ */
+class RestrictedOperator
+{
+public:
+  virtual ~RestrictedOperator() = default;
+
+  // The global dofs of the columns, the same on every rank.
+  virtual std::vector<dealii::types::global_dof_index>
+  source_dofs() const = 0;
+
+  // A(mu) at the dofs (rows, in their order) and source_dofs() (columns), row-major. Collective,
+  // the result is the same on every rank.
+  virtual std::vector<double>
+  assemble(const ParameterValues & mu) const = 0;
+};
+
+/**
  * The components of a stationary problem
  *
- *   A u(mu) = f(mu)
+ *   A(mu) u(mu) = f(mu)
  *
- * with a fixed system operator A and a right-hand side that may depend on the parameters in any
- * way. This is a description for the Python layer, which turns it into a pyMOR StationaryModel;
- * each application implements it once.
+ * with a system operator and a right-hand side that may depend on the parameters in any way. This
+ * is a description for the Python layer, which turns it into a pyMOR StationaryModel; each
+ * application implements it once.
  */
 template<typename VectorType>
 class StationaryModel
@@ -54,9 +76,18 @@ public:
   virtual std::map<std::string, unsigned int>
   parameters() const = 0;
 
-  // A; has to have an inverse.
+  // A(mu), has to have an inverse. If the operator does not depend on the parameters (see
+  // below), mu is empty and the same operator is returned on every call.
   virtual std::shared_ptr<const Operator<VectorType>>
-  system_operator() const = 0;
+  system_operator(const ParameterValues & mu) const = 0;
+
+  // Whether A depends on the parameters. If so, pyMOR calls system_operator(mu) for every mu,
+  // which assembles a new operator; if not, it calls it once.
+  virtual bool
+  system_operator_is_parametric() const
+  {
+    return false;
+  }
 
   // f(mu), a new vector in solution_space().
   virtual std::shared_ptr<VectorType>
@@ -67,6 +98,15 @@ public:
   // (nullptr), pyMOR assembles all of f(mu) for every mu, with the same result but no speedup.
   virtual std::shared_ptr<const RestrictedRhs>
   restricted_rhs(const std::vector<dealii::types::global_dof_index> & /*dofs*/) const
+  {
+    return nullptr;
+  }
+
+  // A(mu) at the given global dofs, for empirical interpolation of a parametric system operator.
+  // Like restricted_rhs(): collective, may refer to the model, optional.
+  virtual std::shared_ptr<const RestrictedOperator>
+  restricted_system_operator(
+    const std::vector<dealii::types::global_dof_index> & /*dofs*/) const
   {
     return nullptr;
   }

@@ -121,7 +121,7 @@ GaussianSourceMatrixFree<dim>::parameters() const
 
 template<int dim>
 std::shared_ptr<const Operator<typename GaussianSourceMatrixFree<dim>::VectorType>>
-GaussianSourceMatrixFree<dim>::system_operator() const
+GaussianSourceMatrixFree<dim>::system_operator(const ParameterValues & /*mu*/) const
 {
   return laplace_operator;
 }

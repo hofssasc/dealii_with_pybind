@@ -5,13 +5,17 @@ import os
 from pymor.core.base import ImmutableObject
 from pymor.models.basic import StationaryModel
 
-from dealii_pymor.operators import DealIIOperator, DealIIRhsOperator
+from dealii_pymor.operators import DealIIOperator, DealIIParametricOperator, DealIIRhsOperator
 
 
 def stationary_model(model, name=None):
     """The pyMOR `StationaryModel` of a C++ `StationaryModel`."""
+    if model.system_operator_is_parametric():
+        operator = DealIIParametricOperator(model, name='operator')
+    else:
+        operator = DealIIOperator(model.system_operator({}), name='operator')
     return StationaryModel(
-        DealIIOperator(model.system_operator(), name='operator'),
+        operator,
         DealIIRhsOperator(model, name='rhs'),
         products={k: DealIIOperator(op, name=f'{k}_product') for k, op in model.products().items()},
         visualizer=DealIIVisualizer(model),

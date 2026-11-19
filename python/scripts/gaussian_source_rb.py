@@ -113,8 +113,8 @@ def run(model, filename):
 
 if __name__ == '__main__':
     run(gaussian_source.make_model(
-        n_refinements=6, degree=2, width=0.2),
+        n_refinements=8, degree=2, width=0.2),
         filename='gaussian_source_rb')
     run(gaussian_source.make_matrix_free_model(
-        n_refinements=6, degree=2, width=0.2),
+        n_refinements=8, degree=2, width=0.2),
         filename='gaussian_source_matrix_free_rb')

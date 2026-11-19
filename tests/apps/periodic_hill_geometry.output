@@ -1,0 +1,19 @@
+
+DEAL::dim 2, hill height 1.000, width 1.930, stretching 0.000
+DEAL::  steepest slope 0.9715 (15 h / (8 w) = 0.9715, 44.17 degrees), min det J 2.036
+DEAL::  wall periodic and symmetric: true, bottom and top on the walls: true, Jacobian matches differences: true
+DEAL::dim 2, hill height 1.000, width 1.930, stretching 1.600
+DEAL::  steepest slope 0.9715 (15 h / (8 w) = 0.9715, 44.17 degrees), min det J 0.5470
+DEAL::  wall periodic and symmetric: true, bottom and top on the walls: true, Jacobian matches differences: true
+DEAL::dim 2, hill height 0.5000, width 1.000, stretching 0.000
+DEAL::  steepest slope 0.9375 (15 h / (8 w) = 0.9375, 43.15 degrees), min det J 2.536
+DEAL::  wall periodic and symmetric: true, bottom and top on the walls: true, Jacobian matches differences: true
+DEAL::dim 2, hill height 2.000, width 4.500, stretching 0.000
+DEAL::  steepest slope 0.8333 (15 h / (8 w) = 0.8333, 39.81 degrees), min det J 1.036
+DEAL::  wall periodic and symmetric: true, bottom and top on the walls: true, Jacobian matches differences: true
+DEAL::dim 2, hill height 2.000, width 2.000, stretching 0.000
+DEAL::  steepest slope 1.875 (15 h / (8 w) = 1.875, 61.93 degrees), min det J 1.036
+DEAL::  wall periodic and symmetric: true, bottom and top on the walls: true, Jacobian matches differences: true
+DEAL::dim 3, hill height 1.000, width 1.930, stretching 1.600
+DEAL::  steepest slope 0.9715 (15 h / (8 w) = 0.9715, 44.17 degrees), min det J 0.5941
+DEAL::  wall periodic and symmetric: true, bottom and top on the walls: true, Jacobian matches differences: true

@@ -1,0 +1,7 @@
+restricted to all 1799 unconstrained dofs, same A(mu) u: True, same f(mu): True
+interpolation dofs: operator 200 (from 1024 snapshots), right-hand side 43 (from 100)
+reduced basis alone: largest relative error 4.8e-03
+operator interpolation dofs  50: largest relative error 1.6e-02
+operator interpolation dofs 100: largest relative error 5.3e-03
+operator interpolation dofs 200: largest relative error 4.8e-03
+reduced operator: ProjectedEmpiricalInterpolatedOperator, right-hand side: ProjectedEmpiricalInterpolatedOperator

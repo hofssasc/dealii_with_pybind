@@ -49,7 +49,8 @@ The same four concepts appear on every layer:
 | vector       | a deal.II vector, e.g. `LinearAlgebra::distributed::Vector<double>` | `Vector`, `DistributedVector` | `DealIIVector`                       | `CopyOnWriteVector`             |
 | vector space | `VectorSpace<VectorType>`           | `VectorSpace`, `DistributedVectorSpace`   | `DealIIVectorSpace`                  | `ListVectorSpace`               |
 | operator     | `Operator<VectorType>`              | `Operator`, `DistributedOperator`         | `DealIIOperator`, `DealIISolver`     | `ListVectorArrayOperatorBase`   |
-| model        | `StationaryModel<VectorType>`       | `StationaryModel`, `DistributedStationaryModel` | `stationary_model()`, `DealIIRhsOperator`, `DealIIVisualizer` | `StationaryModel` |
+| model        | `StationaryModel<VectorType>`       | `StationaryModel`, `DistributedStationaryModel` | `stationary_model()`, `DealIIParametricOperator`, `DealIIRhsOperator`, `DealIIVisualizer` | `StationaryModel` |
+| restricted operator | `RestrictedOperator`               | `RestrictedOperator`                      | `DealIIRestrictedOperator`           | `Operator` (from `restricted()`) |
 | restricted right-hand side | `RestrictedRhs`           | `RestrictedRhs`                           | `DealIIRestrictedRhsOperator`        | `Operator` (from `restricted()`) |
 
 pyMOR's *list vector arrays* are lists of single vectors. Each entry here is
@@ -67,6 +68,9 @@ Following one call through all layers shows how they fit together:
 2. pyMOR calls `apply_inverse` of its system operator. `DealIIOperator` passes
    it to its `DealIISolver`, which calls the C++ `Operator::apply_inverse`. For
    `GaussianSource`, that is CG with algebraic multigrid on a Trilinos matrix.
+   If the operator depends on `mu`, `DealIIParametricOperator` first lets the
+   C++ model assemble it for `mu` (`system_operator(mu)`) and then does the
+   same.
 3. The result is a deal.II vector that is wrapped as a `DealIIVector`. It
    never leaves C++ memory and stays distributed over the MPI ranks.
 
@@ -127,22 +131,26 @@ also an inner product (pyMOR "product") such as the H¹ seminorm.
 
 A model collects the parts of a parameterized stationary problem
 
-    A u(mu) = f(mu)
+    A(mu) u(mu) = f(mu)
 
-with a fixed system operator `A` and a right-hand side that may depend on the
-parameters in any way. Each application implements this once.
+with a system operator and a right-hand side that may depend on the
+parameters in any way. Each application implements this once. Operators
+themselves never depend on the parameters: for every `mu`, the model assembles
+a new one.
 
 | member                         | meaning |
 |--------------------------------|---------|
 | `solution_space()`             | the space of `u` |
 | `parameters()`                 | parameter names and their number of components, e.g. `{"center": 2}` |
-| `system_operator()`            | `A`; must have an inverse |
+| `system_operator(mu)`          | `A(mu)`; must have an inverse. For an operator that does not depend on `mu`, the same object on every call |
+| `system_operator_is_parametric()` | whether `A` depends on `mu`; if not (the default), pyMOR calls `system_operator` once, with empty `mu` |
 | `assemble_rhs(mu)`             | `f(mu)` as a new vector |
 | `restricted_rhs(dofs)`         | `f(mu)` at a few dofs only, for empirical interpolation (below); `nullptr` by default |
+| `restricted_system_operator(dofs)` | the rows of a parametric `A(mu)` at a few dofs only, for empirical interpolation (below); `nullptr` by default |
 | `products()`                   | named inner products; pyMOR adds `<name>_product` and `<name>_norm` to the model; none by default |
 | `write_vtu(directory, basename, fields, names)` | write vectors for ParaView; used by pyMOR's `visualize`; throws by default |
 
-### Empirical interpolation of the right-hand side
+### Empirical interpolation of the right-hand side and the operator
 
 pyMOR cannot see how `f` depends on `mu`. Without help, every reduced solve
 assembles the full `f(mu)` and projects it, and pyMOR logs a warning
@@ -182,6 +190,27 @@ interpolated operator needs one, so it falls back to a generic projection that
 works in the full space again. `DealIIStationaryRBReductor` projects with the
 identity of R¹ instead.
 
+A parametric system operator `A(mu)` (`system_operator_is_parametric()`) is
+interpolated the same way, with `restricted_system_operator(dofs)`. Its
+`RestrictedOperator` has the source dofs, the entries of `u` that the rows of
+`A(mu) u` at the dofs depend on, and `assemble(mu)`, the small dense matrix of
+`A(mu)` at the dofs and the source dofs. The reduced operator applies `A(mu)`
+to the basis vectors, so the snapshots for `ei_greedy` are `A(mu) v` for the
+basis vectors `v` and the training parameters (for a linear problem,
+`A(mu) u(mu)` would just be `f(mu)` again):
+
+```python
+operator_snapshots = fom.solution_space.empty()
+for mu in training_set:
+    operator_snapshots.append(fom.operator.apply(RB, mu=mu))
+dofs, collateral_basis, _ = ei_greedy(operator_snapshots, max_interpolation_dofs=200)
+operator_ei = EmpiricalInterpolatedOperator(fom.operator, dofs, collateral_basis, triangular=True)
+```
+
+The rows have to be those of the condensed system, with the constraints
+eliminated. `RestrictedAssembly` (below) does this for any homogeneous
+constraints, so both restrictions only provide the cell integrals.
+
 ## 3. Implementations (`apps/include/implementations`, `apps/source`)
 
 These are compiled into the shared library `libapplications.so`:
@@ -197,8 +226,8 @@ These are compiled into the shared library `libapplications.so`:
   mesh (`parallel::distributed::Triangulation`), Q_k elements, a
   `ConstrainedVectorSpace` and a `TrilinosMatrixOperator`, and has the product
   `h1_0_semi`. Its restricted right-hand side, `GaussianSourceRestrictedRhs`,
-  integrates the source only over the locally owned cells around the given
-  dofs and sums over the ranks. It requires a mesh without hanging nodes.
+  integrates the source only over the cells around the given dofs, with a
+  `RestrictedAssembly`.
 - **`ExaDGPoissonOperator<dim>`**: a building block. It wraps the
   `Poisson::Operator` of ExaDG as an `Operator`: `apply` is its matrix-free
   `vmult`, and `apply_inverse` is its `solve` (CG with the preconditioner set
@@ -210,6 +239,44 @@ These are compiled into the shared library `libapplications.so`:
   models have the same discrete solution up to the solver tolerance. Only the
   operator and the solver differ. ExaDG has no restricted assembly, so it uses
   `GaussianSourceRestrictedRhs` on ExaDG's `DoFHandler` (same quadrature).
+- **`RestrictedAssembly<dim>`**: a building block for empirical
+  interpolation. For a few unconstrained dofs, it assembles the entries of
+  `Cᵀ f` and the rows of `Cᵀ A C`, with homogeneous constraints `C`
+  (periodicity, hanging nodes, zero Dirichlet values), from cell vectors and
+  cell matrices that the model computes. The row of a dof collects the cells
+  around it and, weighted, the cells around every dof constrained to it (for
+  a periodic boundary the cells at the other end). A constrained column is
+  distributed over the dofs it is constrained to. Each rank assembles its
+  locally owned cells, the result is summed over the ranks.
+- **`PeriodicHillGeometry<dim>`**: a building block for a periodic hill
+  channel with a parametrized, smooth (C²) symmetric hill of height `h` and
+  flank width `w`. It is the analytic map `T` from the reference box
+  `(0, 9) × (0, 1)` onto the channel (ERCOFTAC units: length 9, top wall at
+  3.036), with its Jacobian. `T` only moves points vertically, optionally with
+  ExaDG's tanh stretching towards the walls. A model can then assemble on the
+  fixed reference mesh with the coefficients from `T`, so all parameters share
+  one mesh and one dof numbering.
+- **`PeriodicHillPotentialFlow<dim>`**: potential flow through the channel
+  of `PeriodicHillGeometry`, with the parameters `hill_height` and
+  `hill_width`. It solves for the periodic part `phi_tilde` of the potential
+  `phi = x + phi_tilde` (no flow through the walls, `phi` grows by 9 per
+  period), with `phi_tilde = 0` in the middle of the valley floor. All
+  parameters share one mesh of the reference box, periodic in x: the geometry
+  enters only through the coefficients `K = det(J) J⁻¹J⁻ᵀ` of the map at the
+  quadrature points, so its system operator is parametric and assembled into
+  a new `TrilinosMatrixOperator` for every `mu`. Its product `h1_semi` is the
+  H¹ seminorm on the channel of a fixed `product_mu`. Its restricted
+  right-hand side and operator (`PeriodicHillRestrictedRhs`,
+  `PeriodicHillRestrictedOperator`) use the same cell integrals on a
+  `RestrictedAssembly`. `write_vtu` writes
+  `phi_tilde` on the reference box. `write_flow_vtu(directory, basename, mu,
+  flows, flow_names, differences, difference_names)` writes solutions on the
+  channel of `mu`: for each flow `phi`, the velocity `u = ∇phi` and the
+  pressure `-|u|²/2`, for each difference (e.g. the error of a reduced
+  solution) the differences of `phi` and `u`.
+  `python/scripts/periodic_hill_potential_flow_ei.py` uses it to write the
+  full-order and reduced flows and their difference for every test
+  parameter.
 - `code.h`: a placeholder function for the testsuite setup.
 
 ### Which part of ExaDG is used
@@ -263,6 +330,7 @@ vector type (see below).
 | `dealii_vectors.h`, `dealii_vector_space.h`, `dealii_operator.h`, `dealii_stationary_model.h` | one template function `bind_<interface><VectorType>(module, name)` each |
 | `dealii_core_module.cc` | the module `dealii_core_module`: calls these for `dealii::Vector<double>` (`Vector`, `VectorSpace`, ...) and `LinearAlgebra::distributed::Vector<double>` (`DistributedVector`, ...). It also initializes MPI and provides `this_mpi_process()` and `n_mpi_processes()`. |
 | `gaussian_source.cc` | the application module `gaussian_source`, with `make_model(n_refinements, degree, width)` and `make_matrix_free_model(...)` |
+| `periodic_hill.cc` | the application module `periodic_hill`, with `make_potential_flow_model(n_refinements, degree, stretching, product_mu)`; its model also has `write_flow_vtu` |
 | `example.cc` | helpers for the tests |
 
 Application modules import `dealii_core_module` first, so the classes they
@@ -279,7 +347,7 @@ does not enforce `const`, so it only documents intent.
 | module           | classes |
 |------------------|---------|
 | `vectorarray.py` | `DealIIVector` (one deal.II vector), `DealIIVectorSpace` (a bound `VectorSpace`) |
-| `operators.py`   | `DealIIOperator` (a bound `Operator`), `DealIISolver` (its `apply_inverse`), `DealIIRhsOperator` (`assemble_rhs` as a pyMOR operator), `DealIIRestrictedRhsOperator` (a bound `RestrictedRhs`, from `DealIIRhsOperator.restricted()`) |
+| `operators.py`   | `DealIIOperator` (a bound `Operator`), `DealIISolver` (its `apply_inverse`), `DealIIParametricOperator` (`system_operator(mu)`, assembled into a `DealIIOperator` for every `mu`), `DealIIRestrictedOperator` (a bound `RestrictedOperator`, from `DealIIParametricOperator.restricted()`), `DealIIRhsOperator` (`assemble_rhs` as a pyMOR operator), `DealIIRestrictedRhsOperator` (a bound `RestrictedRhs`, from `DealIIRhsOperator.restricted()`) |
 | `models.py`      | `stationary_model()` (builds pyMOR's `StationaryModel`), `DealIIVisualizer` (`write_vtu`) |
 | `reductors.py`   | `DealIIStationaryRBReductor` (pyMOR's `StationaryRBReductor`, efficient for an interpolated right-hand side) |
 
@@ -453,6 +521,11 @@ Outputs are compared with `numdiff`, using deal.II's tolerances.
 | `pymor/gaussian_source_matrix_free_rb` | the same for the matrix-free model (reuses `run()` of `gaussian_source_rb.py`) |
 | `apps/gaussian_source_restricted_rhs` | the restricted right-hand side of both models equals the assembled one at all interior dofs, Q1–Q3, also on 2 ranks |
 | `pymor/gaussian_source_ei` | reduced basis with an interpolated right-hand side: errors for 16, 32, 64 interpolation dofs, efficient projection |
+| `apps/restricted_assembly` | `RestrictedAssembly` against the full condensed assembly with periodicity, Dirichlet values and hanging nodes (also across the periodic boundary), for a non-symmetric operator: same `Cᵀ f` and `Cᵀ A C u` at all unconstrained dofs and at every 7th, also on 2 ranks |
+| `apps/periodic_hill_geometry` | `PeriodicHillGeometry` for five 2D shapes and one 3D shape: wall periodic and symmetric with the steepest slope `15h/(8w)`, box bottom and top mapped onto the walls, Jacobian equal to finite differences, `det J > 0`; also writes the mapped meshes with `det_J` as `periodic_hill_<dim>d_<k>.vtu` |
+| `apps/periodic_hill_potential_flow` | the solution on the reference box against the plain Laplacian on the mesh mapped by a `MappingQCache` of degree 1–5: equal up to round-off for degree 5 where the map is a polynomial on every cell, the difference stagnates where the C² profile is not smooth inside a cell; flat channel `phi_tilde = 0`; also on 2 ranks |
+| `pymor/periodic_hill_potential_flow_ei` | the restricted operator and right-hand side equal the full ones at all unconstrained dofs; reduced basis with interpolated operator and right-hand side, errors for 50, 100, 200 operator interpolation dofs |
+| `pymor/periodic_hill_potential_flow_rb` | the parametric operator in pyMOR: full-order solve, flow output, POD singular values, reduced basis errors with the generic projection |
 
 **`mpirun` tests:** they are started with deal.II's `DEAL_II_MPIEXEC`. If
 deal.II was configured with the `mpiexec` of a different MPI than the one it
@@ -469,13 +542,15 @@ PYTHONPATH=build/python:python mpirun -n 2 $(which python) tests/pymor/gaussian_
 
 ## 8. Next steps
 
-- System operators that depend on the parameters in a non-affine way, or
-  nonlinear ones. They need a parameter-dependent operator interface. Its
-  restriction will have the same shape as `RestrictedRhs`, plus the source
-  dofs the evaluation reads.
-- `GaussianSourceRestrictedRhs` on adaptive meshes: with hanging nodes, it
-  also needs the cells of the dofs that are constrained to an interpolation
-  dof.
+- Nonlinear operators (Navier–Stokes): `RestrictedOperator` assembles a
+  matrix, which only works for linear operators. A nonlinear one needs
+  `apply(u at the source dofs, mu)` and its Jacobian instead;
+  `RestrictedAssembly` stays the same.
+- The online cost of the interpolated operator grows faster than linearly
+  with the number of interpolation dofs: its restricted matrix is dense
+  (dofs × source dofs) and summed over the ranks as a whole.
+- A C^∞ hill profile: the C² profile limits the geometry approximation where
+  its feet lie inside cells (see `apps/periodic_hill_potential_flow`).
 - The projection problem behind `DealIIStationaryRBReductor` could be
   reported to pyMOR: its rule could treat a missing source basis of R¹ as the
   identity.

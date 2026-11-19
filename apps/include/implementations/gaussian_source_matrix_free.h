@@ -51,7 +51,7 @@ public:
   parameters() const override;
 
   std::shared_ptr<const Operator<VectorType>>
-  system_operator() const override;
+  system_operator(const ParameterValues & mu) const override;
 
   std::shared_ptr<VectorType>
   assemble_rhs(const ParameterValues & mu) const override;

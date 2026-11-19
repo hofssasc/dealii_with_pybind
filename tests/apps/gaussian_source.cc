@@ -42,7 +42,7 @@ main(int argc, char ** argv)
 
       const auto rhs = model.assemble_rhs(mu);
       const auto u   = model.solution_space()->create_vector();
-      model.system_operator()->apply_inverse(*u, *rhs);
+      model.system_operator(mu)->apply_inverse(*u, *rhs);
 
       const double new_energy    = *rhs * *u;
       const double new_increment = new_energy - energy;

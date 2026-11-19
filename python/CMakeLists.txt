@@ -11,6 +11,11 @@ dealii_pybind_add_module(gaussian_source
   LINK    applications
   )
 
+dealii_pybind_add_module(periodic_hill
+  SOURCES bindings/periodic_hill.cc
+  LINK    applications
+  )
+
 # applications provides the interfaces (apps/include/interfaces)
 dealii_pybind_add_module(dealii_core_module
   SOURCES bindings/dealii_core_module.cc

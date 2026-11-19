@@ -71,7 +71,7 @@ PYBIND11_MODULE(dealii_core_module, m, py::mod_gil_not_used()) {
     bindings::bind_operator<dealii::Vector<double>>(m, "Operator");
     bindings::bind_operator<dealii::LinearAlgebra::distributed::Vector<double>>(m, "DistributedOperator");
 
-    bindings::bind_restricted_rhs(m);
+    bindings::bind_restricted(m);
     bindings::bind_stationary_model<dealii::Vector<double>>(m, "StationaryModel");
     bindings::bind_stationary_model<dealii::LinearAlgebra::distributed::Vector<double>>(m, "DistributedStationaryModel");
 }

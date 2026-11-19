@@ -10,8 +10,9 @@
 #include <deal.II/lac/affine_constraints.h>
 #include <deal.II/lac/la_parallel_vector.h>
 
-#include <interfaces/stationary_model.h>
+#include <implementations/restricted_assembly.h>
 #include <implementations/trilinos_matrix_operator.h>
+#include <interfaces/stationary_model.h>
 #include <interfaces/vector_space.h>
 
 #include <map>
@@ -50,7 +51,7 @@ public:
   parameters() const override;
 
   std::shared_ptr<const Operator<VectorType>>
-  system_operator() const override;
+  system_operator(const ParameterValues & mu) const override;
 
   std::shared_ptr<VectorType>
   assemble_rhs(const ParameterValues & mu) const override;
@@ -85,12 +86,9 @@ private:
 
 /**
  * The right-hand side of GaussianSource at a few dofs: the source is only integrated over the
- * locally owned cells that contain one of the dofs, the contributions are then summed over the
- * ranks. GaussianSourceMatrixFree has the same right-hand side and uses it as well.
- *
- * Without hanging nodes, the entry of an unconstrained dof is the sum of the contributions of the
- * cells around it; both are checked. The boundary dofs are the constrained ones, f(mu) is zero
- * there, so empirical interpolation never chooses them.
+ * cells around them, see RestrictedAssembly. GaussianSourceMatrixFree has the same right-hand side
+ * and uses it as well. The boundary dofs are the constrained ones, f(mu) is zero there, so
+ * empirical interpolation never chooses them.
  */
 template<int dim>
 class GaussianSourceRestrictedRhs : public RestrictedRhs
@@ -109,13 +107,7 @@ public:
 private:
   const dealii::FiniteElement<dim> & fe;
   double                             width;
-  std::size_t                        n_dofs;
-  MPI_Comm                           mpi_communicator;
-
-  // The cells with one of the dofs, each with the pairs (dof index on the cell, position in dofs).
-  std::vector<std::pair<typename dealii::DoFHandler<dim>::active_cell_iterator,
-                        std::vector<std::pair<unsigned int, std::size_t>>>>
-    cells;
+  RestrictedAssembly<dim>            assembly;
 };
 
 #endif /* APPLICATIONS_GAUSSIAN_SOURCE_H */

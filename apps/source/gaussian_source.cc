@@ -113,7 +113,7 @@ GaussianSource<dim>::parameters() const
 
 template<int dim>
 std::shared_ptr<const Operator<typename GaussianSource<dim>::VectorType>>
-GaussianSource<dim>::system_operator() const
+GaussianSource<dim>::system_operator(const ParameterValues & /*mu*/) const
 {
   return laplace_operator;
 }
@@ -241,33 +241,8 @@ GaussianSourceRestrictedRhs<dim>::GaussianSourceRestrictedRhs(
   const double                                         width,
   const std::vector<dealii::types::global_dof_index> & dofs,
   const MPI_Comm                                       communicator)
-  : fe(dof_handler.get_fe()), width(width), n_dofs(dofs.size()), mpi_communicator(communicator)
+  : fe(dof_handler.get_fe()), width(width), assembly(dof_handler, constraints, dofs, communicator)
 {
-  AssertThrow(!dof_handler.get_triangulation().has_hanging_nodes(), dealii::ExcNotImplemented());
-
-  std::map<dealii::types::global_dof_index, std::size_t> positions;
-  for(std::size_t k = 0; k < dofs.size(); ++k)
-    positions[dofs[k]] = k;
-
-  std::vector<dealii::types::global_dof_index> dof_indices(fe.n_dofs_per_cell());
-  for(const auto & cell :
-      dof_handler.active_cell_iterators() | dealii::IteratorFilters::LocallyOwnedCell())
-  {
-    cell->get_dof_indices(dof_indices);
-
-    std::vector<std::pair<unsigned int, std::size_t>> entries;
-    for(unsigned int i = 0; i < dof_indices.size(); ++i)
-      if(const auto position = positions.find(dof_indices[i]); position != positions.end())
-      {
-        AssertThrow(!constraints.is_constrained(dof_indices[i]),
-                    dealii::ExcMessage("Dof " + std::to_string(dof_indices[i]) +
-                                       " is constrained."));
-        entries.emplace_back(i, position->second);
-      }
-
-    if(!entries.empty())
-      cells.emplace_back(cell, std::move(entries));
-  }
 }
 
 template<int dim>
@@ -276,19 +251,12 @@ GaussianSourceRestrictedRhs<dim>::evaluate(const ParameterValues & mu) const
 {
   const dealii::Point<dim> center    = get_center<dim>(mu);
   dealii::FEValues<dim>    fe_values = create_rhs_fe_values(fe);
-  dealii::Vector<double>   cell_rhs(fe.n_dofs_per_cell());
 
-  std::vector<double> values(n_dofs, 0.);
-  for(const auto & [cell, entries] : cells)
-  {
-    fe_values.reinit(cell);
-    integrate_source(fe_values, center, width, cell_rhs);
-    for(const auto & [i, k] : entries)
-      values[k] += cell_rhs(i);
-  }
-  dealii::Utilities::MPI::sum(values, mpi_communicator, values);
-
-  return values;
+  return assembly.assemble_vector(
+    [&](const auto & cell, dealii::Vector<double> & cell_rhs) {
+      fe_values.reinit(cell);
+      integrate_source(fe_values, center, width, cell_rhs);
+    });
 }
 
 template class GaussianSource<2>;
