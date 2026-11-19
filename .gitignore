@@ -1,6 +1,7 @@
 # out-of-source build and install trees
 /build*/
 /install/
+/output/
 
 # CMake artifacts (e.g. from an accidental in-source configure)
 CMakeCache.txt

@@ -46,8 +46,8 @@ ExaDGPoissonOperator<dim>::apply_inverse(VectorType & dst, const VectorType & rh
 {
   const unsigned int n_iterations = pde_operator->solve(dst, rhs, 0.0 /*time*/);
 
-  // Logs the number of iterations to deallog like TrilinosMatrixOperator; prints nothing unless a
-  // stream is attached, as in the tests.
+  // Logs the number of iterations to deallog like TrilinosMatrixOperator;
+  // prints nothing unless a stream is attached (see tests).
   dealii::deallog << "Convergence step " << n_iterations << std::endl;
 }
 
