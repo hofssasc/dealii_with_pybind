@@ -31,8 +31,8 @@
  *   Laplace phi = 0,   u.n = 0 on the walls,   phi(x + 9) = phi(x) + 9,
  *
  * so that the integral of u along every path over one period is 9, e.g. u_x has the mean 1 on
- * horizontal lines above the crests. With
- * phi = x + phi_tilde, the unknown phi_tilde is periodic and solves
+ * horizontal lines above the crests. With phi = x + phi_tilde, the unknown phi_tilde is periodic
+ * and solves
  *
  *   (grad v, grad phi_tilde) = -(grad v, e_x)   for all periodic v.
  *

@@ -32,7 +32,7 @@ get_scalar(const ParameterValues & mu, const std::string & name)
   return values[0];
 }
 
-// The quadrature of A(mu) and f(mu), degree + 1 Gauss points as in ExaDG.
+// The quadrature of A(mu) and f(mu), degree + 1 Gauss points.
 template<int dim>
 dealii::FEValues<dim>
 create_fe_values(const dealii::FiniteElement<dim> & fe)
@@ -185,6 +185,8 @@ PeriodicHillPotentialFlow<dim>::PeriodicHillPotentialFlow(const unsigned int    
   valley_floor[0] = PeriodicHillGeometry<dim>::length / 2.;
   if(dim == 3)
     valley_floor[2] = PeriodicHillGeometry<dim>::depth / 2.;
+
+  // This can be improved but works for now.
   for(const auto & cell : dof_handler.active_cell_iterators())
     if(!cell->is_artificial())
       for(const unsigned int v : cell->vertex_indices())

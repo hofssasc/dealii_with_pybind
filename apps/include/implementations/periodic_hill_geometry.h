@@ -12,14 +12,14 @@
  * The map T from the reference box onto a periodic hill channel, analytic and C^2 smooth.
  *
  * Lengths are in units of the ERCOFTAC hill height: the channel is periodic over the length 9 in
- * x, the top wall is at y = 3.036, as in ExaDG's periodic hill. The bottom wall is the symmetric
- * hill profile
+ * x, the top wall is at y = 3.036. The bottom wall is the symmetric hill profile
  *
  *   y_w(x) = h s(d(x) / w),   d(x) = min(x, 9 - x),   s(t) = 1 - 10 t^3 + 15 t^4 - 6 t^5,
  *
  * with s = 0 for t > 1: crests of the height h at x = 0 and 9, flanks of the width w, and a flat
  * valley between the flanks if w < 4.5. The steepest slope is 15 h / (8 w); h = 1, w = 1.93 is
- * close to the ERCOFTAC hill.
+ * close to the ERCOFTAC hill. Note that h is here not the height of the top wall as in ERTOFTAC,
+ * but the height of the hill profile.
  *
  * The reference box is (0, 9) x (0, 1) (x (0, 4.5) in 3D). T only shifts and stretches vertically,
  *
@@ -33,6 +33,7 @@ template<int dim>
 class PeriodicHillGeometry
 {
 public:
+  // in dimensionless units (not multiplied by the 28mm)
   static constexpr double length = 9.;
   static constexpr double height = 3.036;
   // Only in 3D, the extent in z.

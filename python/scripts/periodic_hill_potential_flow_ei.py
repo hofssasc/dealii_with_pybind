@@ -126,7 +126,7 @@ def run(model, filename, n_basis=16, n_operator_dofs=200):
     # For every test parameter: the full-order and the reduced solution, their relative error in the
     # h1 product, and on the channel of the parameter the flows fom_* and rom_* (potential,
     # velocity, pressure) and their difference error_* (potential, velocity).
-    test_set = parameter_space.sample_randomly(10)
+    test_set = parameter_space.sample_randomly(20)
     files, errors, fom_times, rom_times = [], [], [], []
     for k, mu in enumerate(test_set):
         start = time.time()
@@ -153,4 +153,4 @@ def run(model, filename, n_basis=16, n_operator_dofs=200):
 
 if __name__ == '__main__':
     run(periodic_hill.make_potential_flow_model(n_refinements=4, degree=2),
-        filename='periodic_hill_potential_flow_ei')
+        filename='periodic_hill_potential_flow_ei', n_basis=16, n_operator_dofs=100)

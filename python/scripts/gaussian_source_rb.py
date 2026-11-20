@@ -24,6 +24,7 @@ def log(*args):
 set_log_levels({'pymor': 'ERROR', 'dealii_pymor': 'ERROR'})
 
 def run(model, filename):
+    log('SETTING UP THE FULL-ORDER MODEL')
     # Wrap the C++ model from gaussian_source.make_model() (or make_matrix_free_model()) in a pyMOR
     # StationaryModel.
     # This allows to use cpp functions (e.g system_operator(), parameters(), solution_space(),
@@ -32,6 +33,9 @@ def run(model, filename):
     h1 = fom.h1_0_semi_product
     log(f'parameters: {fom.parameters}, dimension: {fom.solution_space.dim}')
 
+
+
+    log('FULL-ORDER TEST SOLVE')
     mu = fom.parameters.parse([0.3, 0.6])
     U = fom.solve(mu)
     F = fom.rhs.as_range_array(mu)
@@ -40,7 +44,8 @@ def run(model, filename):
     log(f'visualized: {fom.visualize(U, filename=f"output/{filename}", legend="u")}')
 
 
-    # ------------------Reduction of the Poisson Operator ---------------------------
+
+    log('SNAPSHOTS AND REDUCED BASIS FROM POD')
     # Define parameter space such that source doesnt leave the domain and uniformly sample a grid of 6x6.
     parameter_space = fom.parameters.space(0.2, 0.8)
     training_set = parameter_space.sample_uniformly(6)
@@ -57,12 +62,11 @@ def run(model, filename):
     end = time.time()
     log(f'time for POD: {end - start:.2f} s')
     log(f'snapshots: {len(snapshots)}, POD modes: {len(basis)}' )
-
     log(f'visualized: {fom.visualize(basis, filename=f"output/{filename}_modes", legend=[f"mode_{i}" for i in range(1, len(basis) + 1)])}')
 
 
 
-    # ------------------Emiprical Interpolation of the Right-Hand Side ---------------------------
+    log('EMPIRICAL INTERPOLATION OF THE RIGHT-HAND SIDE')
     # The right-hand side is non-affine, so we use empirical interpolation to approximate it
     # with a reduced basis and interpolation dofs. The reduced basis is obtained from snapshots of
     # the right-hand side on a finer grid of centers, since assembling the rhs is cheaper.
@@ -79,15 +83,18 @@ def run(model, filename):
     end = time.time()
     log(f'time for empirical interpolation: {end - start:.2f} s')
     log(f'right-hand side snapshots: {len(rhs_snapshots)}, interpolation dofs: {len(dofs)}')
+    log(f'{dofs}')
 
+    log(f'visualized: {fom.visualize(collateral_basis, filename=f"output/{filename}_modes_rhs", legend=[f"mode_{i}" for i in range(1, len(collateral_basis) + 1)])}')
+
+
+
+    log('REDUCED BASIS AND EMPIRICAL INTERPOLATION ERROR ESTIMATION')
     def relative_error(rom, mu, u):
         return ((u - reductor.reconstruct(rom.solve(mu))).norm(h1) / u.norm(h1))[0]
 
-
-
-    # ------------------Reduced Basis and Empirical Interpolation Error Estimation ---------------------------
     test_set = parameter_space.sample_randomly(10)
-    solutions = [fom.solve(mu) for mu in test_set]
+    solutions_test = [fom.solve(mu) for mu in test_set]
     rhs_test = [fom.rhs.as_range_array(mu) for mu in test_set]
 
     # No need to recompute dofs and collateral basis, they are hierarchically ordered and taking the first M
@@ -108,13 +115,13 @@ def run(model, filename):
             log(f'time for error estimation: {end - start:.2f} s')
 
             log(f'interpolation dofs {M:2d}: largest relative error of the right-hand side {rhs_error:.1e}, '
-                f'reduced dimension {n:2d}: largest relative error {max(relative_error(rom, mu, u) for mu, u in zip(test_set, solutions)):.1e}')
+                f'reduced dimension {n:2d}: largest relative error {max(relative_error(rom, mu, u) for mu, u in zip(test_set, solutions_test)):.1e}')
 
 
 if __name__ == '__main__':
     run(gaussian_source.make_model(
-        n_refinements=8, degree=2, width=0.2),
+        n_refinements=6, degree=1, width=0.2),
         filename='gaussian_source_rb')
     run(gaussian_source.make_matrix_free_model(
-        n_refinements=8, degree=2, width=0.2),
+        n_refinements=6, degree=1, width=0.2),
         filename='gaussian_source_matrix_free_rb')
