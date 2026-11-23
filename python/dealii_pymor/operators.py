@@ -1,6 +1,7 @@
 """pyMOR operators of C++ `Operators` and `StationaryModels`."""
 
 import numpy as np
+from pymor.operators.constructions import ConstantOperator, LincombOperator
 from pymor.operators.interface import Operator
 from pymor.operators.list import ListVectorArrayOperatorBase
 from pymor.operators.numpy import NumpyMatrixOperator
@@ -131,3 +132,43 @@ class DealIIRestrictedRhsOperator(Operator):
         assert self.parameters.assert_compatible(mu)
         F = self.range.make_array(np.array(self.impl.evaluate(mu))[:, np.newaxis])
         return F.lincomb(U.to_numpy())
+
+
+class RhsFunctional(Operator):
+    """u ↦ f(μ)ᵀu for a right-hand side f(μ), an operator from R^1 like `DealIIRhsOperator`, on
+    the full or on a reduced space.
+
+    `DealIIStationaryRBReductor` projects it by projecting `rhs` like the right-hand side of the
+    model, so that an interpolated right-hand side stays efficient here as well; pyMOR's generic
+    projection would evaluate f(μ) in the full space for every μ.
+    """
+
+    linear = True
+
+    def __init__(self, rhs, name=None):
+        assert rhs.linear and rhs.source.dim == 1
+        self.__auto_init(locals())
+        self.source = rhs.range
+        self.range = NumpyVectorSpace(1)
+
+    def apply(self, U, mu=None):
+        assert U in self.source
+        return self.range.make_array(self.rhs.as_range_array(mu).inner(U))
+
+    def apply_adjoint(self, V, mu=None):
+        assert V in self.range
+        return self.rhs.as_range_array(mu).lincomb(V.to_numpy())
+
+
+def compliant_output(rhs, factor=1., offset=None, name='output'):
+    """The output functional offset(μ) + factor(μ) f(μ)ᵀu of the right-hand side f(μ) `rhs`.
+
+    For a symmetric coercive system operator, the error of this output for a Galerkin reduced
+    solution is quadratic in the error of the solution. `factor` and `offset` are numbers or
+    `ParameterFunctionals`, without `offset` the output is linear.
+    """
+    operators, coefficients = [RhsFunctional(rhs)], [factor]
+    if offset is not None:
+        operators.append(ConstantOperator(NumpyVectorSpace(1).ones(), rhs.range))
+        coefficients.append(offset)
+    return LincombOperator(operators, coefficients, name=name)

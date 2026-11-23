@@ -41,6 +41,8 @@ from dealii_pymor.operators import (  # noqa: E402
     DealIIRestrictedRhsOperator,
     DealIIRhsOperator,
     DealIISolver,
+    RhsFunctional,
+    compliant_output,
 )
 from dealii_pymor.reductors import DealIIStationaryRBReductor  # noqa: E402
 from dealii_pymor.vectorarray import DealIIVector, DealIIVectorSpace  # noqa: E402
@@ -48,4 +50,4 @@ from dealii_pymor.vectorarray import DealIIVector, DealIIVectorSpace  # noqa: E4
 __all__ = ['DealIIOperator', 'DealIIParametricOperator', 'DealIIRestrictedOperator',
            'DealIIRestrictedRhsOperator', 'DealIIRhsOperator', 'DealIISolver',
            'DealIIStationaryRBReductor', 'DealIIVector', 'DealIIVectorSpace', 'DealIIVisualizer',
-           'stationary_model']
+           'RhsFunctional', 'compliant_output', 'stationary_model']

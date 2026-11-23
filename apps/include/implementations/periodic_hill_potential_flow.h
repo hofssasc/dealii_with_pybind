@@ -36,8 +36,17 @@
  *
  *   (grad v, grad phi_tilde) = -(grad v, e_x)   for all periodic v.
  *
- * Constants are removed by phi_tilde = 0 in the middle of the valley floor. The flow rate depends
- * on the geometry, the flow is linear in it: scale the velocity for a given flow rate.
+ * Constants are removed by phi_tilde = 0 in the middle of the valley floor.
+ *
+ * The flow rate Q, the volume flux through every cross-section x = const (div u = 0, u.n = 0 on
+ * the walls), depends on the geometry, and the flow is linear in it: for a given flow rate, scale
+ * the velocity by it over Q. Averaged over one period, Q is the integral of u_x over the channel
+ * over 9, and since (grad v, e_x) = -f(mu)_v,
+ *
+ *   Q(mu) = (|Omega(mu)| - f(mu)^T phi_tilde) / 9 = (|Omega(mu)| - phi_tilde^T A(mu) phi_tilde) / 9,
+ *
+ * see flow_rate(). It is linear in phi_tilde with the right-hand side as functional, a compliant
+ * output, and it does not depend on the constant in phi_tilde, as the entries of f(mu) sum to zero.
  *
  * Everything is solved on one fixed mesh of the reference box, with continuous Q_k elements,
  * periodic in x (and z). The dofs are those of phi_tilde o T, the geometry only enters the
@@ -111,6 +120,10 @@ public:
                  const std::vector<std::string> &                       flow_names,
                  const std::vector<std::shared_ptr<const VectorType>> & differences,
                  const std::vector<std::string> &                       difference_names) const;
+
+  // The flow rate Q(mu) of the solution phi_tilde for mu (see above). Collective.
+  double
+  flow_rate(const ParameterValues & mu, const VectorType & phi_tilde) const;
 
   PeriodicHillGeometry<dim>
   geometry(const ParameterValues & mu) const;

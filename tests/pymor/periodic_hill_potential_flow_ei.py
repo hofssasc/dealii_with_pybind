@@ -2,7 +2,8 @@
 # operator and right-hand side: A(mu) and f(mu) are only assembled at a few dofs, on the cells
 # around them (PeriodicHillRestrictedOperator and PeriodicHillRestrictedRhs in
 # apps/include/implementations/periodic_hill_potential_flow.h), so no reduced solve touches the
-# full mesh. Runs serially and on 2 ranks (SPMD).
+# full mesh. The flow rate as output, with the interpolated right-hand side as its functional, which
+# the reduction projects like the right-hand side. Runs serially and on 2 ranks (SPMD).
 
 import dealii_pymor  # before pymor, see dealii_pymor/__init__.py
 import numpy as np
@@ -10,6 +11,7 @@ from pymor.algorithms.ei import ei_greedy
 from pymor.algorithms.pod import pod
 from pymor.core.logger import set_log_levels
 from pymor.operators.ei import EmpiricalInterpolatedOperator
+from pymor.parameters.functionals import GenericParameterFunctional
 from pymor.reductors.basic import StationaryRBReductor
 
 import dealii_core_module as dealii
@@ -23,8 +25,17 @@ def log(*args):
 
 set_log_levels({'pymor': 'ERROR', 'dealii_pymor': 'ERROR'})
 
-fom = dealii_pymor.stationary_model(periodic_hill.make_potential_flow_model(n_refinements=2, degree=2),
-                                    name='periodic_hill_potential_flow')
+model = periodic_hill.make_potential_flow_model(n_refinements=2, degree=2)
+fom = dealii_pymor.stationary_model(model, name='periodic_hill_potential_flow')
+L = periodic_hill.length
+volume = GenericParameterFunctional(lambda mu: model.volume(mu) / L, fom.parameters)
+
+
+def flow_rate(rhs):
+    return dealii_pymor.compliant_output(rhs, factor=-1 / L, offset=volume, name='flow_rate')
+
+
+fom = fom.with_(output_functional=flow_rate(fom.rhs))
 h1 = fom.h1_semi_product
 parameter_space = fom.parameters.space({'hill_height': (0.5, 1.5), 'hill_width': (2., 4.5)})
 
@@ -69,11 +80,16 @@ log(f'interpolation dofs: operator {len(operator_dofs)} (from {len(operator_snap
 
 test_set = parameter_space.sample_randomly(10)
 solutions = [fom.solve(mu) for mu in test_set]
+outputs = [fom.output(mu)[0, 0] for mu in test_set]
 
 
 def solution_error(reductor, rom):
     return max(((u - reductor.reconstruct(rom.solve(mu))).norm(h1) / u.norm(h1))[0]
                for mu, u in zip(test_set, solutions))
+
+
+def output_error(rom):
+    return max(abs(rom.output(mu)[0, 0] - Q) / Q for mu, Q in zip(test_set, outputs))
 
 
 reductor = StationaryRBReductor(fom, RB=basis, product=h1)
@@ -83,10 +99,13 @@ rhs_ei = EmpiricalInterpolatedOperator(fom.rhs, rhs_dofs, rhs_basis, triangular=
 for M in (50, 100, 200):
     operator_ei = EmpiricalInterpolatedOperator(fom.operator, operator_dofs[:M], operator_basis[:M],
                                                 triangular=True)
-    reductor = dealii_pymor.DealIIStationaryRBReductor(fom.with_(operator=operator_ei, rhs=rhs_ei),
-                                                       RB=basis, product=h1)
+    reductor = dealii_pymor.DealIIStationaryRBReductor(
+        fom.with_(operator=operator_ei, rhs=rhs_ei, output_functional=flow_rate(rhs_ei)),
+        RB=basis, product=h1)
     rom = reductor.reduce()
     # The number of source dofs depends on the dof numbering, i.e. on the number of ranks.
-    log(f'operator interpolation dofs {M:3d}: largest relative error {solution_error(reductor, rom):.1e}')
+    log(f'operator interpolation dofs {M:3d}: largest relative error {solution_error(reductor, rom):.1e}, '
+        f'of the flow rate {output_error(rom):.1e}')
 
-log(f'reduced operator: {type(rom.operator).__name__}, right-hand side: {type(rom.rhs).__name__}')
+log(f'reduced operator: {type(rom.operator).__name__}, right-hand side: {type(rom.rhs).__name__}, '
+    f'in the flow rate: {type(rom.output_functional.operators[0].rhs).__name__}')

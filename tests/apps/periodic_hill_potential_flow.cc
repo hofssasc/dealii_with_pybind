@@ -8,11 +8,15 @@
 //    solutions agree up to round-off.
 //  - hill width 1.93: the feet lie inside cells, the interpolation error of T stays O(h^3) for all
 //    p >= 3, and so does the difference.
-// A flat channel has the exact solution phi_tilde = 0 (the flow u = e_x). The mpirun=2 variant has
-// to give the same.
+// A flat channel has the exact solution phi_tilde = 0 (the flow u = e_x) and the flow rate 3.036.
+// With a hill, flow_rate() (the mean of u_x over the channel times its height) against the flux of
+// the discrete velocity through the cross-sections at the crest and in the valley, which is only
+// conserved up to the discretization error, and against ||grad phi||^2 / 9 (Galerkin orthogonality).
+// The mpirun=2 variant has to give the same.
 
 #include "../tests.h"
 
+#include <deal.II/base/mpi.h>
 #include <deal.II/base/quadrature_lib.h>
 
 #include <deal.II/dofs/dof_tools.h>
@@ -30,6 +34,7 @@
 #include <implementations/periodic_hill_potential_flow.h>
 #include <implementations/trilinos_matrix_operator.h>
 
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -101,6 +106,41 @@ solve_on_mapped_mesh(const Model & model, const ParameterValues & mu, const unsi
   return u;
 }
 
+// The integral of u_x = 1 + d phi_tilde / dx over the cross-section at x_hat = x, a vertical line of
+// the reference mesh, on the channel of mu.
+double
+cross_section_flux(const Model & model, const ParameterValues & mu, const VectorType & u, const double x)
+{
+  const DoFHandler<2> &   dof_handler = model.get_dof_handler();
+  const PeriodicHillGeometry<2> geometry = model.geometry(mu);
+
+  VectorType ghosted(u);
+  model.get_constraints().distribute(ghosted);
+  ghosted.update_ghost_values();
+
+  const FiniteElement<2> & fe = dof_handler.get_fe();
+  FEFaceValues<2>          fe_face_values(fe,
+                                 QGauss<1>(fe.degree + 2),
+                                 update_gradients | update_quadrature_points | update_JxW_values);
+  std::vector<Tensor<1, 2>> gradients(fe_face_values.n_quadrature_points);
+  double                    flux = 0.;
+  // Face 1 of a cell is the one at its right end in x.
+  for(const auto & cell : dof_handler.active_cell_iterators() | IteratorFilters::LocallyOwnedCell())
+    if(std::abs(cell->face(1)->center()[0] - x) < 1e-12)
+    {
+      fe_face_values.reinit(cell, 1);
+      fe_face_values.get_function_gradients(ghosted, gradients);
+      for(const unsigned int q : fe_face_values.quadrature_point_indices())
+      {
+        // The gradient on the channel is J^-T times the one on the reference box, and dy = J_yy dy_hat.
+        const Tensor<2, 2> J = geometry.jacobian(fe_face_values.quadrature_point(q));
+        const double u_x = 1. + (transpose(invert(J)) * gradients[q])[0];
+        flux += u_x * J[1][1] * fe_face_values.JxW(q);
+      }
+    }
+  return Utilities::MPI::sum(flux, dof_handler.get_mpi_communicator());
+}
+
 int
 main(int argc, char ** argv)
 {
@@ -115,13 +155,34 @@ main(int argc, char ** argv)
   deallog << "dofs: " << model.solution_space()->n_dofs() << std::endl;
 
   const ParameterValues flat     = {{"hill_height", {0.}}, {"hill_width", {3.}}};
-  const double          max_flat = solve(model, flat)->linfty_norm();
-  deallog << "flat channel, phi_tilde = 0: " << (max_flat < 1e-12 ? "true" : "false") << std::endl;
+  const auto            u_flat   = solve(model, flat);
+  deallog << "flat channel, phi_tilde = 0: " << (u_flat->linfty_norm() < 1e-12 ? "true" : "false")
+          << ", flow rate 3.036: "
+          << (std::abs(model.flow_rate(flat, *u_flat) - PeriodicHillGeometry<2>::height) < 1e-12 ?
+                "true" :
+                "false")
+          << std::endl;
 
   for(const double width : {1.93, 2.})
   {
     const ParameterValues mu = {{"hill_height", {1.}}, {"hill_width", {width}}};
     const auto            u  = solve(model, mu);
+
+    const double flow_rate = model.flow_rate(mu, *u);
+    VectorType   Au(*u);
+    model.system_operator(mu)->apply(Au, *u);
+    const double energy = (model.geometry(mu).volume() - Au * *u) / PeriodicHillGeometry<2>::length;
+    deallog << "hill width " << width << ": flow rate " << flow_rate
+            << ", relative difference to the flux through the crest "
+            << std::abs(cross_section_flux(model, mu, *u, PeriodicHillGeometry<2>::length) - flow_rate) /
+                 flow_rate
+            << ", the valley below 1e-6: "
+            << (std::abs(cross_section_flux(model, mu, *u, PeriodicHillGeometry<2>::length / 2.) -
+                         flow_rate) < 1e-6 * flow_rate ?
+                  "true" :
+                  "false")
+            << ", equals ||grad phi||^2 / 9: "
+            << (std::abs(energy - flow_rate) < 1e-8 * flow_rate ? "true" : "false") << std::endl;
     for(const unsigned int degree : {1u, 2u, 3u, 5u})
     {
       VectorType difference = *solve_on_mapped_mesh(model, mu, degree);

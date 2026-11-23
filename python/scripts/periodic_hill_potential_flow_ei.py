@@ -11,6 +11,7 @@ from pymor.algorithms.ei import ei_greedy
 from pymor.algorithms.pod import pod
 from pymor.core.logger import set_log_levels
 from pymor.operators.ei import EmpiricalInterpolatedOperator
+from pymor.parameters.functionals import GenericParameterFunctional
 
 import dealii_core_module as dealii
 import periodic_hill
@@ -43,6 +44,16 @@ def run(model, filename, n_basis=16, n_operator_dofs=200):
     # StationaryModel. Its system operator depends on the parameters: the C++ model assembles
     # A(mu) on the reference box for every mu (DealIIParametricOperator).
     fom = dealii_pymor.stationary_model(model, name='periodic_hill_potential_flow')
+    # The flow rate Q(mu) = (|Omega(mu)| - f(mu)^T phi_tilde) / 9 as output, a compliant output: its
+    # reduced error is quadratic in the error of phi_tilde. To prescribe a flow rate instead of the
+    # jump 9 of phi, scale the velocity by it over Q(mu).
+    L = periodic_hill.length
+    volume = GenericParameterFunctional(lambda mu: model.volume(mu) / L, fom.parameters)
+
+    def flow_rate(rhs):
+        return dealii_pymor.compliant_output(rhs, factor=-1 / L, offset=volume, name='flow_rate')
+
+    fom = fom.with_(output_functional=flow_rate(fom.rhs))
     h1 = fom.h1_semi_product
     log(f'parameters: {fom.parameters}, dimension: {fom.solution_space.dim}')
 
@@ -114,8 +125,10 @@ def run(model, filename, n_basis=16, n_operator_dofs=200):
     rhs_ei = EmpiricalInterpolatedOperator(fom.rhs, rhs_dofs, rhs_basis, triangular=True)
     operator_ei = EmpiricalInterpolatedOperator(fom.operator, operator_dofs, operator_basis, triangular=True)
     start = time.time()
-    reductor = dealii_pymor.DealIIStationaryRBReductor(fom.with_(operator=operator_ei, rhs=rhs_ei),
-                                                       RB=basis, product=h1)
+    # The flow rate with the interpolated right-hand side, projected like it.
+    reductor = dealii_pymor.DealIIStationaryRBReductor(
+        fom.with_(operator=operator_ei, rhs=rhs_ei, output_functional=flow_rate(rhs_ei)),
+        RB=basis, product=h1)
     rom = reductor.reduce()
     end = time.time()
     log(f'time for reduction: {end - start:.2f} s, '
@@ -127,7 +140,7 @@ def run(model, filename, n_basis=16, n_operator_dofs=200):
     # h1 product, and on the channel of the parameter the flows fom_* and rom_* (potential,
     # velocity, pressure) and their difference error_* (potential, velocity).
     test_set = parameter_space.sample_randomly(20)
-    files, errors, fom_times, rom_times = [], [], [], []
+    files, errors, output_errors, fom_times, rom_times = [], [], [], [], []
     for k, mu in enumerate(test_set):
         start = time.time()
         u = fom.solve(mu)
@@ -140,14 +153,16 @@ def run(model, filename, n_basis=16, n_operator_dofs=200):
         u_reconstructed = reductor.reconstruct(u_rb)
         error = u - u_reconstructed
         errors.append((error.norm(h1) / u.norm(h1))[0])
+        Q = fom.output_functional.apply(u, mu=mu).to_numpy()[0, 0]
+        output_errors.append(abs(rom.output(mu)[0, 0] - Q) / Q)
         files.append(model.write_flow_vtu('output/', f'{filename}_test_{k}', mu,
                                           [u.vectors[0].impl, u_reconstructed.vectors[0].impl],
                                           ['fom', 'rom'], [error.vectors[0].impl], ['error']))
         log(f'test {k}: hill height {mu["hill_height"][0]:.3f}, width {mu["hill_width"][0]:.3f}, '
-            f'relative error {errors[-1]:.1e}, time fom {fom_times[-1]:.3f} s, rom {rom_times[-1]:.4f} s')
+            f'relative error {errors[-1]:.1e}, flow rate {Q:.4f} (error {output_errors[-1]:.1e}), time fom {fom_times[-1]:.3f} s, rom {rom_times[-1]:.4f} s')
 
     log(f'visualized: {write_pvd(f"output/{filename}_test.pvd", files)}')
-    log(f'largest relative error {max(errors):.1e}, '
+    log(f'largest relative error {max(errors):.1e}, of the flow rate {max(output_errors):.1e}, '
         f'mean speedup {np.mean(fom_times) / np.mean(rom_times):.0f}')
 
 

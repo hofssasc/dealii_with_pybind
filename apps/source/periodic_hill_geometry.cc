@@ -87,6 +87,14 @@ PeriodicHillGeometry<dim>::wall_derivative(const double x) const
 }
 
 template<int dim>
+double
+PeriodicHillGeometry<dim>::volume() const
+{
+  const double area = length * height - hill_height * hill_width;
+  return dim == 3 ? area * depth : area;
+}
+
+template<int dim>
 dealii::Point<dim>
 PeriodicHillGeometry<dim>::push_forward(const dealii::Point<dim> & x_hat) const
 {

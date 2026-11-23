@@ -273,7 +273,12 @@ These are compiled into the shared library `libapplications.so`:
   flows, flow_names, differences, difference_names)` writes solutions on the
   channel of `mu`: for each flow `phi`, the velocity `u = ∇phi` and the
   pressure `-|u|²/2`, for each difference (e.g. the error of a reduced
-  solution) the differences of `phi` and `u`.
+  solution) the differences of `phi` and `u`. `flow_rate(mu, phi_tilde)` is
+  the volume flux `Q` through every cross-section, `(|Omega(mu)| -
+  f(mu)ᵀphi_tilde) / 9` with the exact area `|Omega(mu)| = 9 · 3.036 - h w`
+  (`PeriodicHillGeometry::volume()`): a compliant output, so its reduced error
+  is quadratic in the error of `phi_tilde`. For a prescribed flow rate instead
+  of the jump 9 of `phi`, scale the velocity by it over `Q`.
   `python/scripts/periodic_hill_potential_flow_ei.py` uses it to write the
   full-order and reduced flows and their difference for every test
   parameter.
@@ -330,7 +335,7 @@ vector type (see below).
 | `dealii_vectors.h`, `dealii_vector_space.h`, `dealii_operator.h`, `dealii_stationary_model.h` | one template function `bind_<interface><VectorType>(module, name)` each |
 | `dealii_core_module.cc` | the module `dealii_core_module`: calls these for `dealii::Vector<double>` (`Vector`, `VectorSpace`, ...) and `LinearAlgebra::distributed::Vector<double>` (`DistributedVector`, ...). It also initializes MPI and provides `this_mpi_process()` and `n_mpi_processes()`. |
 | `gaussian_source.cc` | the application module `gaussian_source`, with `make_model(n_refinements, degree, width)` and `make_matrix_free_model(...)` |
-| `periodic_hill.cc` | the application module `periodic_hill`, with `make_potential_flow_model(n_refinements, degree, stretching, product_mu)`; its model also has `write_flow_vtu` |
+| `periodic_hill.cc` | the application module `periodic_hill`, with `make_potential_flow_model(n_refinements, degree, stretching, product_mu)`; its model also has `write_flow_vtu`, `flow_rate(mu, phi_tilde)` and `volume(mu)`; the module has `length` |
 | `example.cc` | helpers for the tests |
 
 Application modules import `dealii_core_module` first, so the classes they
@@ -347,9 +352,9 @@ does not enforce `const`, so it only documents intent.
 | module           | classes |
 |------------------|---------|
 | `vectorarray.py` | `DealIIVector` (one deal.II vector), `DealIIVectorSpace` (a bound `VectorSpace`) |
-| `operators.py`   | `DealIIOperator` (a bound `Operator`), `DealIISolver` (its `apply_inverse`), `DealIIParametricOperator` (`system_operator(mu)`, assembled into a `DealIIOperator` for every `mu`), `DealIIRestrictedOperator` (a bound `RestrictedOperator`, from `DealIIParametricOperator.restricted()`), `DealIIRhsOperator` (`assemble_rhs` as a pyMOR operator), `DealIIRestrictedRhsOperator` (a bound `RestrictedRhs`, from `DealIIRhsOperator.restricted()`) |
+| `operators.py`   | `DealIIOperator` (a bound `Operator`), `DealIISolver` (its `apply_inverse`), `DealIIParametricOperator` (`system_operator(mu)`, assembled into a `DealIIOperator` for every `mu`), `DealIIRestrictedOperator` (a bound `RestrictedOperator`, from `DealIIParametricOperator.restricted()`), `DealIIRhsOperator` (`assemble_rhs` as a pyMOR operator), `DealIIRestrictedRhsOperator` (a bound `RestrictedRhs`, from `DealIIRhsOperator.restricted()`), `RhsFunctional` (`u ↦ f(μ)ᵀu` for a right-hand side), `compliant_output(rhs, factor, offset)` (the output `offset(μ) + factor(μ) f(μ)ᵀu`) |
 | `models.py`      | `stationary_model()` (builds pyMOR's `StationaryModel`), `DealIIVisualizer` (`write_vtu`) |
-| `reductors.py`   | `DealIIStationaryRBReductor` (pyMOR's `StationaryRBReductor`, efficient for an interpolated right-hand side) |
+| `reductors.py`   | `DealIIStationaryRBReductor` (pyMOR's `StationaryRBReductor`, efficient for an interpolated right-hand side, also in an `RhsFunctional` of the output) |
 
 Import `dealii_pymor` before `pymor` (see [section 5](#5-parallel-execution-spmd)):
 
@@ -522,10 +527,10 @@ Outputs are compared with `numdiff`, using deal.II's tolerances.
 | `apps/gaussian_source_restricted_rhs` | the restricted right-hand side of both models equals the assembled one at all interior dofs, Q1–Q3, also on 2 ranks |
 | `pymor/gaussian_source_ei` | reduced basis with an interpolated right-hand side: errors for 16, 32, 64 interpolation dofs, efficient projection |
 | `apps/restricted_assembly` | `RestrictedAssembly` against the full condensed assembly with periodicity, Dirichlet values and hanging nodes (also across the periodic boundary), for a non-symmetric operator: same `Cᵀ f` and `Cᵀ A C u` at all unconstrained dofs and at every 7th, also on 2 ranks |
-| `apps/periodic_hill_geometry` | `PeriodicHillGeometry` for five 2D shapes and one 3D shape: wall periodic and symmetric with the steepest slope `15h/(8w)`, box bottom and top mapped onto the walls, Jacobian equal to finite differences, `det J > 0`; also writes the mapped meshes with `det_J` as `periodic_hill_<dim>d_<k>.vtu` |
-| `apps/periodic_hill_potential_flow` | the solution on the reference box against the plain Laplacian on the mesh mapped by a `MappingQCache` of degree 1–5: equal up to round-off for degree 5 where the map is a polynomial on every cell, the difference stagnates where the C² profile is not smooth inside a cell; flat channel `phi_tilde = 0`; also on 2 ranks |
-| `pymor/periodic_hill_potential_flow_ei` | the restricted operator and right-hand side equal the full ones at all unconstrained dofs; reduced basis with interpolated operator and right-hand side, errors for 50, 100, 200 operator interpolation dofs |
-| `pymor/periodic_hill_potential_flow_rb` | the parametric operator in pyMOR: full-order solve, flow output, POD singular values, reduced basis errors with the generic projection |
+| `apps/periodic_hill_geometry` | `PeriodicHillGeometry` for five 2D shapes and one 3D shape: wall periodic and symmetric with the steepest slope `15h/(8w)`, box bottom and top mapped onto the walls, Jacobian equal to finite differences, `det J > 0`, `volume()` equal to the integral of `det J`; also writes the mapped meshes with `det_J` as `periodic_hill_<dim>d_<k>.vtu` |
+| `apps/periodic_hill_potential_flow` | the solution on the reference box against the plain Laplacian on the mesh mapped by a `MappingQCache` of degree 1–5: equal up to round-off for degree 5 where the map is a polynomial on every cell, the difference stagnates where the C² profile is not smooth inside a cell; flat channel `phi_tilde = 0` with the flow rate 3.036; `flow_rate` against the flux through the cross-sections at the crest and in the valley and against `‖∇phi‖²/9`; also on 2 ranks |
+| `pymor/periodic_hill_potential_flow_ei` | the restricted operator and right-hand side equal the full ones at all unconstrained dofs; reduced basis with interpolated operator and right-hand side, errors of the solution and of the flow rate for 50, 100, 200 operator interpolation dofs, efficient projection of the flow rate |
+| `pymor/periodic_hill_potential_flow_rb` | the parametric operator in pyMOR: full-order solve, flow output, POD singular values, reduced basis errors with the generic projection; the flow rate as compliant output, equal to `flow_rate` of the C++ model, with the reduced error `‖e‖²/9` |
 
 **`mpirun` tests:** they are started with deal.II's `DEAL_II_MPIEXEC`. If
 deal.II was configured with the `mpiexec` of a different MPI than the one it

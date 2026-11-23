@@ -1,7 +1,7 @@
 // PeriodicHillGeometry for a few hill shapes: the wall is periodic and symmetric with the steepest
 // slope 15 h / (8 w), the bottom and top of the reference box are mapped onto the hill and the top
 // wall, the Jacobian agrees with central differences of push_forward, and det J is positive at the
-// quadrature points of a reference mesh. Also writes the mapped meshes with det J per cell,
+// quadrature points of a reference mesh, and volume() is the integral of det J. Also writes the mapped meshes with det J per cell,
 // periodic_hill_<dim>d_<k>.vtu, to look at them.
 
 #include "../tests.h"
@@ -103,6 +103,22 @@ test(const std::vector<Shape> & shapes, const unsigned int n_refinements)
       cell_determinants[cell->active_cell_index()] = determinant(geometry.jacobian(cell->center()));
     }
 
+    // The integral of det J, with a fine quadrature in x, as the feet of the hill, where the profile
+    // is only C^2, may lie inside cells; det J does not depend on z.
+    const QIterated<1> fine_x(QGauss<1>(4), 20);
+    const QGauss<1>    gauss_y(6);
+    FEValues<dim>      fine_values(fe,
+                              dim == 2 ? QAnisotropic<dim>(fine_x, gauss_y) :
+                                         QAnisotropic<dim>(fine_x, gauss_y, QGauss<1>(1)),
+                              update_quadrature_points | update_JxW_values);
+    double        volume = 0.;
+    for(const auto & cell : triangulation.active_cell_iterators())
+    {
+      fine_values.reinit(cell);
+      for(const unsigned int q : fine_values.quadrature_point_indices())
+        volume += determinant(geometry.jacobian(fine_values.quadrature_point(q))) * fine_values.JxW(q);
+    }
+
     deallog << "dim " << dim << ", hill height " << shape.hill_height << ", width "
             << shape.hill_width << ", stretching " << shape.stretching << std::endl;
     deallog << "  steepest slope " << max_slope << " (15 h / (8 w) = "
@@ -112,6 +128,9 @@ test(const std::vector<Shape> & shapes, const unsigned int n_refinements)
     deallog << "  wall periodic and symmetric: " << (wall_ok ? "true" : "false")
             << ", bottom and top on the walls: " << (walls_ok ? "true" : "false")
             << ", Jacobian matches differences: " << (jacobian_error < 1e-7 ? "true" : "false")
+            << std::endl;
+    deallog << "  volume " << geometry.volume() << ", equals the integral of det J: "
+            << (std::abs(volume - geometry.volume()) < 1e-10 * geometry.volume() ? "true" : "false")
             << std::endl;
 
     GridTools::transform(

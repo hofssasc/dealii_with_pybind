@@ -24,7 +24,16 @@ PYBIND11_MODULE(periodic_hill, m, py::mod_gil_not_used()) {
                  py::arg("directory"), py::arg("basename"), py::arg("mu"), py::arg("flows"),
                  py::arg("flow_names"),
                  py::arg("differences") = std::vector<std::shared_ptr<const VectorType>>(),
-                 py::arg("difference_names") = std::vector<std::string>());
+                 py::arg("difference_names") = std::vector<std::string>())
+            .def("flow_rate", &Model::flow_rate,
+                 "The volume flux Q(mu) through every cross-section for the solution phi_tilde of mu.",
+                 py::arg("mu"), py::arg("phi_tilde"))
+            .def("volume",
+                 [](const Model& model, const ParameterValues& mu)
+                 { return model.geometry(mu).volume(); },
+                 "The area of the channel of mu.", py::arg("mu"));
+
+    m.attr("length") = PeriodicHillGeometry<2>::length;
 
     m.def("make_potential_flow_model",
           [](unsigned int n_refinements, unsigned int degree, double stretching,

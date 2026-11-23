@@ -339,6 +339,16 @@ PeriodicHillPotentialFlow<dim>::write_flow_vtu(
 }
 
 template<int dim>
+double
+PeriodicHillPotentialFlow<dim>::flow_rate(const ParameterValues & mu,
+                                          const VectorType &      phi_tilde) const
+{
+  // f(mu) is zero at the constrained dofs, so their entries in phi_tilde do not matter.
+  return (geometry(mu).volume() - *assemble_rhs(mu) * phi_tilde) /
+         PeriodicHillGeometry<dim>::length;
+}
+
+template<int dim>
 PeriodicHillGeometry<dim>
 PeriodicHillPotentialFlow<dim>::geometry(const ParameterValues & mu) const
 {

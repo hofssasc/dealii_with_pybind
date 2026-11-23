@@ -54,6 +54,11 @@ public:
   double
   wall_derivative(const double x) const;
 
+  // The volume of the channel (its area in 2D), exactly: the integral of s over a flank of width w
+  // is w / 2, so the hill takes h w of the box (0, 9) x (0, 3.036).
+  double
+  volume() const;
+
   dealii::Point<dim>
   push_forward(const dealii::Point<dim> & x_hat) const;
 
