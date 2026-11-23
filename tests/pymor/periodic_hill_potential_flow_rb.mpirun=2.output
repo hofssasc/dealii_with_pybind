@@ -1,11 +1,6 @@
-parameters: {hill_height: 1, hill_width: 1}, dimension: 1825, operator: DealIIParametricOperator
-relative residual below 1e-9: True
-h1_semi norm of phi_tilde: 1.232971e+00
-flow rate: 2.675595, same as flow_rate() of the C++ model: True
-flow written: flow_0.pvtu
-snapshots: 36, POD modes: 36
-singular values relative to the first: 2.8e-01 3.2e-02 9.2e-03 3.1e-03 8.6e-04
-reduced dimension  4: largest relative error 8.9e-02, of the flow rate 1.1e-04, the latter is ||e||^2 / 9: True
-reduced dimension  8: largest relative error 1.6e-02, of the flow rate 1.4e-05, the latter is ||e||^2 / 9: True
-reduced dimension 16: largest relative error 1.0e-02, of the flow rate 7.3e-06, the latter is ||e||^2 / 9: True
-reduced operator: ProjectedOperator
+pod::snapshots: 36, POD modes: 36
+pod::singular values relative to the first: 2.8e-01 3.2e-02 9.2e-03 3.1e-03 8.6e-04
+reduced_basis::reduced dimension  4: largest relative error 8.9e-02, of the flow rate 1.1e-04, the latter is ||e||^2 / 9: True
+reduced_basis::reduced dimension  8: largest relative error 1.6e-02, of the flow rate 1.4e-05, the latter is ||e||^2 / 9: True
+reduced_basis::reduced dimension 16: largest relative error 1.0e-02, of the flow rate 7.3e-06, the latter is ||e||^2 / 9: True
+reduced_basis::reduced operator: ProjectedOperator

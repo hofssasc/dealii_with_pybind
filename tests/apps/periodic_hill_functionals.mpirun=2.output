@@ -1,0 +1,10 @@
+
+DEAL:flat_channel::flux through the lower third 1.012: true, mean wall pressure -0.5: true
+DEAL:hill_width_1.93:flux::x = 2.250: whole cross-section, relative difference to the flow rate 1.070e-08, lower third 0.7852
+DEAL:hill_width_1.93:flux::x = 2.300: whole cross-section, relative difference to the flow rate 1.070e-08, lower third 0.7907
+DEAL:hill_width_1.93:gradient::flux: value 0.7852, gradient matches central differences: true
+DEAL:hill_width_1.93:gradient::pressure: value -0.6971, gradient matches central differences: true
+DEAL:hill_width_3.00:flux::x = 2.250: whole cross-section, relative difference to the flow rate 0.0004434, lower third 0.7249
+DEAL:hill_width_3.00:flux::x = 2.300: whole cross-section, relative difference to the flow rate 0.0002063, lower third 0.7260
+DEAL:hill_width_3.00:gradient::flux: value 0.7249, gradient matches central differences: true
+DEAL:hill_width_3.00:gradient::pressure: value -0.7816, gradient matches central differences: true

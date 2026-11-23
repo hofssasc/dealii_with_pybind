@@ -7,6 +7,7 @@
 #include "dealii_vectors.h"
 #include "dealii_vector_space.h"
 #include "dealii_operator.h"
+#include "dealii_functional.h"
 #include "dealii_stationary_model.h"
 // Currently registered vector types
 #include <deal.II/lac/vector.h>
@@ -70,6 +71,9 @@ PYBIND11_MODULE(dealii_core_module, m, py::mod_gil_not_used()) {
 
     bindings::bind_operator<dealii::Vector<double>>(m, "Operator");
     bindings::bind_operator<dealii::LinearAlgebra::distributed::Vector<double>>(m, "DistributedOperator");
+
+    bindings::bind_functional<dealii::Vector<double>>(m, "Functional");
+    bindings::bind_functional<dealii::LinearAlgebra::distributed::Vector<double>>(m, "DistributedFunctional");
 
     bindings::bind_restricted(m);
     bindings::bind_stationary_model<dealii::Vector<double>>(m, "StationaryModel");

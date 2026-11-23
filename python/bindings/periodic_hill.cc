@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <implementations/periodic_hill_functionals.h>
 #include <implementations/periodic_hill_potential_flow.h>
 
 #include <deal.II/base/mpi.h>
@@ -33,7 +34,25 @@ PYBIND11_MODULE(periodic_hill, m, py::mod_gil_not_used()) {
                  { return model.geometry(mu).volume(); },
                  "The area of the channel of mu.", py::arg("mu"));
 
+    // Quantities of interest, Functionals bound in dealii_core_module. They refer to the model,
+    // which is kept alive as long as they are.
+    py::class_<PeriodicHillCrossSectionFlux<2>, Functional<VectorType>,
+               std::shared_ptr<PeriodicHillCrossSectionFlux<2>>>(
+            m, "CrossSectionFlux",
+            "The flux through the part y_hat_lower <= y_hat <= y_hat_upper of the cross-section x, "
+            "y_hat in [0, 1] from the hill to the top wall (periodic_hill_functionals.h).")
+            .def(py::init<const Model&, double, double, double>(), py::arg("model"), py::arg("x"),
+                 py::arg("y_hat_lower") = 0., py::arg("y_hat_upper") = 1., py::keep_alive<1, 2>());
+    py::class_<PeriodicHillWallPressure<2>, Functional<VectorType>,
+               std::shared_ptr<PeriodicHillWallPressure<2>>>(
+            m, "WallPressure",
+            "The mean pressure -|u|^2 / 2 on the hill for x_lower <= x <= x_upper "
+            "(periodic_hill_functionals.h).")
+            .def(py::init<const Model&, double, double>(), py::arg("model"), py::arg("x_lower"),
+                 py::arg("x_upper"), py::keep_alive<1, 2>());
+
     m.attr("length") = PeriodicHillGeometry<2>::length;
+    m.attr("height") = PeriodicHillGeometry<2>::height;
 
     m.def("make_potential_flow_model",
           [](unsigned int n_refinements, unsigned int degree, double stretching,

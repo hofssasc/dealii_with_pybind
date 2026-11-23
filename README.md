@@ -126,6 +126,22 @@ also an inner product (pyMOR "product") such as the H¹ seminorm.
 | `apply(dst, src)`          | `dst = A src` |
 | `has_inverse()`            | whether `apply_inverse` is implemented; false by default |
 | `apply_inverse(dst, rhs)`  | solve `A dst = rhs`; `dst` holds the initial guess on entry, as in deal.II's solvers |
+| `has_adjoint()`            | whether `apply_adjoint` (and `apply_inverse_adjoint`, if there is an inverse) is implemented; false by default |
+| `apply_adjoint(dst, src)`  | `dst = Aᵀ src`, from `range()` to `source()`; how is up to the operator, a symmetric one applies itself |
+| `apply_inverse_adjoint(dst, rhs)` | solve `Aᵀ dst = rhs`, like `apply_inverse`; for adjoint problems, e.g. goal-oriented reduction |
+
+### `Functional<VectorType>` (`functional.h`)
+
+A quantity of interest `J(mu; u)` of a solution, linear or not, e.g. a flux or
+a mean pressure. The application creates it, as it knows which quantities make
+sense; it is not part of `StationaryModel`. Its derivative is the right-hand
+side of the adjoint problem `A(mu)ᵀ z = -dJ/du(mu; u)` for goal-oriented
+reduction.
+
+| member                     | meaning |
+|----------------------------|---------|
+| `value(mu, u)`             | `J(mu; u)`, collective, the same on every rank |
+| `gradient(mu, u)`          | `dJ/du(mu; u)` as a new vector, the entries of the linear functional `v ↦ dJ/du(mu; u) v`; independent of `u` for an affine `J` |
 
 ### `StationaryModel<VectorType>` (`stationary_model.h`)
 
@@ -218,8 +234,10 @@ These are compiled into the shared library `libapplications.so`:
 - **`TrilinosMatrixOperator`**: a building block. It is a symmetric positive
   definite `TrilinosWrappers::SparseMatrix` as an `Operator`, inverted by CG
   with an algebraic multigrid preconditioner (set up once, in the
-  constructor). CG logs its iteration count to `deallog`, which stays silent
-  unless a stream is attached, as in the tests.
+  constructor). Being symmetric, it is its own adjoint: `apply_adjoint` and
+  `apply_inverse_adjoint` are `apply` and `apply_inverse`. CG logs its
+  iteration count to `deallog`, which stays silent unless a stream is
+  attached, as in the tests.
 - **`GaussianSource<dim>`**: the template application. It solves Poisson's
   equation `-Δu = exp(-|x - center|² / width²)` on the unit square, with
   `u = 0` on the boundary and the parameter `center`. It uses a distributed
@@ -282,6 +300,22 @@ These are compiled into the shared library `libapplications.so`:
   `python/scripts/periodic_hill_potential_flow_ei.py` uses it to write the
   full-order and reduced flows and their difference for every test
   parameter.
+- **`PeriodicHillLineFunctional<dim>`** (`periodic_hill_functionals.h`, 2D):
+  quantities of interest of `PeriodicHillPotentialFlow` as `Functional`s,
+  integrals (or means with respect to the arc length) of a function of the
+  velocity along a segment of a line of the reference box. The segment is
+  fixed on the reference box, so the cells it touches do not depend on `mu`;
+  it does not have to lie on mesh lines (on a face, the gradients of both
+  sides are averaged). `PeriodicHillCrossSectionFlux` is the flux through the
+  part `y_hat_lower ≤ ŷ ≤ y_hat_upper` of the cross-section `x` (affine; for
+  the whole cross-section the flow rate up to the discretization error),
+  `PeriodicHillWallPressure` the mean pressure `-|u|²/2` on the hill for
+  `x_lower ≤ x ≤ x_upper` (quadratic).
+  `python/scripts/periodic_hill_goal_oriented_rom.py` compares reduced bases
+  of `2n` POD modes of the solutions with bases of `n` modes of the solutions
+  and `n` of the adjoint solutions for both, at a prescribed flow rate `Q0`:
+  `J_Q0 = (Q0 / Q)^k J` for a quantity of degree `k` in the velocity, with the
+  derivative by the product and the chain rule (`AtFlowRate` in the script).
 - `code.h`: a placeholder function for the testsuite setup.
 
 ### Which part of ExaDG is used
@@ -332,10 +366,10 @@ vector type (see below).
 
 | file | content |
 |------|---------|
-| `dealii_vectors.h`, `dealii_vector_space.h`, `dealii_operator.h`, `dealii_stationary_model.h` | one template function `bind_<interface><VectorType>(module, name)` each |
+| `dealii_vectors.h`, `dealii_vector_space.h`, `dealii_operator.h`, `dealii_functional.h`, `dealii_stationary_model.h` | one template function `bind_<interface><VectorType>(module, name)` each |
 | `dealii_core_module.cc` | the module `dealii_core_module`: calls these for `dealii::Vector<double>` (`Vector`, `VectorSpace`, ...) and `LinearAlgebra::distributed::Vector<double>` (`DistributedVector`, ...). It also initializes MPI and provides `this_mpi_process()` and `n_mpi_processes()`. |
 | `gaussian_source.cc` | the application module `gaussian_source`, with `make_model(n_refinements, degree, width)` and `make_matrix_free_model(...)` |
-| `periodic_hill.cc` | the application module `periodic_hill`, with `make_potential_flow_model(n_refinements, degree, stretching, product_mu)`; its model also has `write_flow_vtu`, `flow_rate(mu, phi_tilde)` and `volume(mu)`; the module has `length` |
+| `periodic_hill.cc` | the application module `periodic_hill`, with `make_potential_flow_model(n_refinements, degree, stretching, product_mu)`; its model also has `write_flow_vtu`, `flow_rate(mu, phi_tilde)` and `volume(mu)`; the functionals `CrossSectionFlux(model, x, y_hat_lower, y_hat_upper)` and `WallPressure(model, x_lower, x_upper)`; the module has `length` and `height` |
 | `example.cc` | helpers for the tests |
 
 Application modules import `dealii_core_module` first, so the classes they
@@ -352,7 +386,7 @@ does not enforce `const`, so it only documents intent.
 | module           | classes |
 |------------------|---------|
 | `vectorarray.py` | `DealIIVector` (one deal.II vector), `DealIIVectorSpace` (a bound `VectorSpace`) |
-| `operators.py`   | `DealIIOperator` (a bound `Operator`), `DealIISolver` (its `apply_inverse`), `DealIIParametricOperator` (`system_operator(mu)`, assembled into a `DealIIOperator` for every `mu`), `DealIIRestrictedOperator` (a bound `RestrictedOperator`, from `DealIIParametricOperator.restricted()`), `DealIIRhsOperator` (`assemble_rhs` as a pyMOR operator), `DealIIRestrictedRhsOperator` (a bound `RestrictedRhs`, from `DealIIRhsOperator.restricted()`), `RhsFunctional` (`u ↦ f(μ)ᵀu` for a right-hand side), `compliant_output(rhs, factor, offset)` (the output `offset(μ) + factor(μ) f(μ)ᵀu`) |
+| `operators.py`   | `DealIIFunctional` (a bound `Functional` as an operator to R¹, with its `jacobian`; the adjoint right-hand side is `-J.jacobian(u, mu).as_source_array(mu)`), `DealIIOperator` (a bound `Operator`, with its `apply_adjoint` if it has one), `DealIISolver` (its `apply_inverse` and `apply_inverse_adjoint`), `DealIIParametricOperator` (`system_operator(mu)`, assembled into a `DealIIOperator` for every `mu`, also for the adjoint), `DealIIRestrictedOperator` (a bound `RestrictedOperator`, from `DealIIParametricOperator.restricted()`), `DealIIRhsOperator` (`assemble_rhs` as a pyMOR operator), `DealIIRestrictedRhsOperator` (a bound `RestrictedRhs`, from `DealIIRhsOperator.restricted()`), `RhsFunctional` (`u ↦ f(μ)ᵀu` for a right-hand side), `compliant_output(rhs, factor, offset)` (the output `offset(μ) + factor(μ) f(μ)ᵀu`) |
 | `models.py`      | `stationary_model()` (builds pyMOR's `StationaryModel`), `DealIIVisualizer` (`write_vtu`) |
 | `reductors.py`   | `DealIIStationaryRBReductor` (pyMOR's `StationaryRBReductor`, efficient for an interpolated right-hand side, also in an `RhsFunctional` of the output) |
 
@@ -515,6 +549,20 @@ Outputs are compared with `numdiff`, using deal.II's tolerances.
   `PYTHONPATH`, and for `tests/pymor` also `python/` from the source tree, so
   `dealii_pymor` is tested without installing it.
 
+A test file covers one topic. Setup that several checks need (a model,
+solutions, snapshots) is computed once at its top; each check is a function
+that logs in a section of its own, so a diff names the check that changed.
+In C++, a section is deal.II's `LogStream::Prefix` (lines `DEAL:<name>::...`),
+and `deallog.depth_file()` hides the CG iterations one level below. In
+`tests/pymor`, `common.py` (not a test, it has no `.output` file) provides
+`log`, `section(name)` and `run(test_a, test_b, ...)`, which calls the
+functions `test_<name>` in sections `<name>::`, and the periodic hill model
+with its flow rate output.
+
+When a new test is run for the first time with `ctest -j`, its serial and
+`mpirun` variants may build the same executable at the same time and fail
+with "Text file busy"; running it again (or with `-j1`) works.
+
 | test                          | checks |
 |-------------------------------|--------|
 | `apps/gaussian_source`        | Q1–Q3 on refined meshes: convergence order of the energy ‖∇u‖² (2k for Q_k), CG iterations about constant under refinement (AMG works); on 2 ranks the same dofs and energies |
@@ -530,7 +578,10 @@ Outputs are compared with `numdiff`, using deal.II's tolerances.
 | `apps/periodic_hill_geometry` | `PeriodicHillGeometry` for five 2D shapes and one 3D shape: wall periodic and symmetric with the steepest slope `15h/(8w)`, box bottom and top mapped onto the walls, Jacobian equal to finite differences, `det J > 0`, `volume()` equal to the integral of `det J`; also writes the mapped meshes with `det_J` as `periodic_hill_<dim>d_<k>.vtu` |
 | `apps/periodic_hill_potential_flow` | the solution on the reference box against the plain Laplacian on the mesh mapped by a `MappingQCache` of degree 1–5: equal up to round-off for degree 5 where the map is a polynomial on every cell, the difference stagnates where the C² profile is not smooth inside a cell; flat channel `phi_tilde = 0` with the flow rate 3.036; `flow_rate` against the flux through the cross-sections at the crest and in the valley and against `‖∇phi‖²/9`; also on 2 ranks |
 | `pymor/periodic_hill_potential_flow_ei` | the restricted operator and right-hand side equal the full ones at all unconstrained dofs; reduced basis with interpolated operator and right-hand side, errors of the solution and of the flow rate for 50, 100, 200 operator interpolation dofs, efficient projection of the flow rate |
-| `pymor/periodic_hill_potential_flow_rb` | the parametric operator in pyMOR: full-order solve, flow output, POD singular values, reduced basis errors with the generic projection; the flow rate as compliant output, equal to `flow_rate` of the C++ model, with the reduced error `‖e‖²/9` |
+| `pymor/periodic_hill_potential_flow_fom` | the parametric operator in pyMOR: full-order solve, flow output, the flow rate equal to `flow_rate` of the C++ model, the adjoint of `A(μ)` and the adjoint solve |
+| `pymor/periodic_hill_potential_flow_rb` | POD singular values, reduced basis errors with the generic projection, the flow rate as compliant output with the reduced error `‖e‖²/9` |
+| `apps/periodic_hill_functionals` | the flux through a cross-section and the mean wall pressure: exact in a flat channel; the flux through a whole cross-section against `flow_rate`, on a mesh line and inside cells, in the valley and on the flank; gradients against central differences; also on 2 ranks |
+| `pymor/periodic_hill_functionals` | `DealIIFunctional`: values of the C++ functionals, jacobians against central differences, the adjoint solution as derivative `-(z, g)`, output errors of `2n` primal modes against `n` primal and `n` adjoint modes |
 
 **`mpirun` tests:** they are started with deal.II's `DEAL_II_MPIEXEC`. If
 deal.II was configured with the `mpiexec` of a different MPI than the one it
@@ -554,6 +605,13 @@ PYTHONPATH=build/python:python mpirun -n 2 $(which python) tests/pymor/gaussian_
 - The online cost of the interpolated operator grows faster than linearly
   with the number of interpolation dofs: its restricted matrix is dense
   (dofs × source dofs) and summed over the ranks as a whole.
+- Online-efficient quantities of interest: the reduced output still evaluates
+  a `Functional` on the reconstructed solution. A restricted evaluation on the
+  few dofs of its segment, wrapped as pyMOR's `EmpiricalInterpolatedOperator`
+  with the single range dof, would be exact and cheap.
+- Error estimation for the goal-oriented models (dual-weighted residual,
+  `DWRCoerciveRBReductor`), which needs residual estimators that work with the
+  interpolated operator.
 - A C^∞ hill profile: the C² profile limits the geometry approximation where
   its feet lie inside cells (see `apps/periodic_hill_potential_flow`).
 - The projection problem behind `DealIIStationaryRBReductor` could be

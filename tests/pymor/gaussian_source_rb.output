@@ -1,10 +1,10 @@
-parameters: {center: 2}, dimension: 1089
-relative residual below 1e-9: True
-h1_0_semi norm of the solution: 4.362563e-02
-visualized: solution_0.pvtu
-snapshots: 36, POD modes: 36
-snapshot reproduced (relative error below 1e-8): True
-reduced dimension  4: largest relative error 3.3e-01
-reduced dimension  8: largest relative error 1.0e-01
-reduced dimension 16: largest relative error 3.4e-02
-reduced dimension 32: largest relative error 3.7e-03
+solve::parameters: {center: 2}, dimension: 1089
+solve::relative residual below 1e-9: True
+solve::h1_0_semi norm of the solution: 4.362563e-02
+solve::visualized: solution_0.pvtu
+snapshot::snapshots: 36, POD modes: 36
+snapshot::snapshot reproduced (relative error below 1e-8): True
+reduced_basis::reduced dimension  4: largest relative error 3.3e-01
+reduced_basis::reduced dimension  8: largest relative error 1.0e-01
+reduced_basis::reduced dimension 16: largest relative error 3.4e-02
+reduced_basis::reduced dimension 32: largest relative error 3.7e-03

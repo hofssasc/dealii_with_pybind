@@ -1,0 +1,8 @@
+functional::flux: value 0.722449, the one of the C++ functional: True, jacobian matches central differences: True
+functional::pressure: value -0.781611, the one of the C++ functional: True, jacobian matches central differences: True
+adjoint::flux: dJ/du A^-1 g = -(z, g): True
+adjoint::pressure: dJ/du A^-1 g = -(z, g): True
+goal_oriented::flux, n = 4: largest relative output error with 8 primal modes 1.6e-02, with 4 + 4 primal and adjoint modes 2.2e-04
+goal_oriented::flux, n = 8: largest relative output error with 16 primal modes 1.3e-02, with 8 + 8 primal and adjoint modes 3.2e-05
+goal_oriented::pressure, n = 4: largest relative output error with 8 primal modes 1.7e-03, with 4 + 4 primal and adjoint modes 4.4e-04
+goal_oriented::pressure, n = 8: largest relative output error with 16 primal modes 1.4e-03, with 8 + 8 primal and adjoint modes 2.5e-05

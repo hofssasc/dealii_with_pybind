@@ -49,6 +49,29 @@ public:
   {
     AssertThrow(false, dealii::ExcMessage("This operator has no inverse."));
   }
+
+  // Per default, operators do not have an adjoint (transpose), e.g. for goal-oriented reduction.
+  // If they do, override this method and apply_adjoint(), and apply_inverse_adjoint() if they have
+  // an inverse as well. How is up to the operator: a symmetric one can apply itself.
+  virtual bool
+  has_adjoint() const
+  {
+    return false;
+  }
+
+  // A^T src = dst, from range() to source().
+  virtual void
+  apply_adjoint(VectorType & /*dst*/, const VectorType & /*src*/) const
+  {
+    AssertThrow(false, dealii::ExcMessage("This operator has no adjoint."));
+  }
+
+  // Solve A^T dst = rhs. On entry, dst holds the initial guess.
+  virtual void
+  apply_inverse_adjoint(VectorType & /*dst*/, const VectorType & /*rhs*/) const
+  {
+    AssertThrow(false, dealii::ExcMessage("This operator has no inverse adjoint."));
+  }
 };
 
 #endif /* APPLICATIONS_OPERATOR_H */

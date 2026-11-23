@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 #include <vector>
 
 using VectorType = LinearAlgebra::distributed::Vector<double>;
@@ -148,8 +149,10 @@ main(int argc, char ** argv)
   deallog << "dofs: " << dof_handler.n_dofs() << ", unconstrained: " << unconstrained_dofs.size()
           << std::endl;
 
-  for(const auto & dofs : {unconstrained_dofs, every_7th})
+  for(const auto & [name, dofs] : {std::pair{"unconstrained_dofs", unconstrained_dofs},
+                                    std::pair{"every_7th", every_7th}})
   {
+    LogStream::Prefix           prefix(name);
     const RestrictedAssembly<2> assembly(dof_handler, constraints, dofs, MPI_COMM_WORLD);
     const auto &                source_dofs = assembly.get_source_dofs();
 

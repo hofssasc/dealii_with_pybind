@@ -24,7 +24,10 @@ namespace bindings
                 .def("range", &Op::range)
                 .def("apply", &Op::apply, py::arg("dst"), py::arg("src"))
                 .def("has_inverse", &Op::has_inverse)
-                .def("apply_inverse", &Op::apply_inverse, py::arg("dst"), py::arg("rhs"));
+                .def("apply_inverse", &Op::apply_inverse, py::arg("dst"), py::arg("rhs"))
+                .def("has_adjoint", &Op::has_adjoint)
+                .def("apply_adjoint", &Op::apply_adjoint, py::arg("dst"), py::arg("src"))
+                .def("apply_inverse_adjoint", &Op::apply_inverse_adjoint, py::arg("dst"), py::arg("rhs"));
     }
 }
 

@@ -41,10 +41,12 @@
 using Model      = PeriodicHillPotentialFlow<2>;
 using VectorType = Model::VectorType;
 
+// The CG iterations are logged one level below the caller, so that depth_file() hides them.
 std::shared_ptr<VectorType>
 solve(const Model & model, const ParameterValues & mu)
 {
-  const auto rhs = model.assemble_rhs(mu);
+  LogStream::Prefix prefix("solve");
+  const auto        rhs = model.assemble_rhs(mu);
   const auto u   = model.solution_space()->create_vector();
   model.system_operator(mu)->apply_inverse(*u, *rhs);
   return u;
@@ -141,54 +143,76 @@ cross_section_flux(const Model & model, const ParameterValues & mu, const Vector
   return Utilities::MPI::sum(flux, dof_handler.get_mpi_communicator());
 }
 
+// A flat channel: phi_tilde = 0, the flow u = e_x, and the flow rate is the height of the channel.
+void
+test_flat_channel(const Model & model)
+{
+  LogStream::Prefix               prefix("flat_channel");
+  const ParameterValues           flat = {{"hill_height", {0.}}, {"hill_width", {3.}}};
+  const auto                      u    = solve(model, flat);
+  deallog << "phi_tilde = 0: " << (u->linfty_norm() < 1e-12 ? "true" : "false")
+          << ", flow rate 3.036: "
+          << (std::abs(model.flow_rate(flat, *u) - PeriodicHillGeometry<2>::height) < 1e-12 ?
+                "true" :
+                "false")
+          << std::endl;
+}
+
+// flow_rate() against the flux through the crest and the valley, and against ||grad phi||^2 / 9.
+void
+test_flow_rate(const Model & model, const ParameterValues & mu, const VectorType & u)
+{
+  LogStream::Prefix prefix("flow_rate");
+  const double      flow_rate = model.flow_rate(mu, u);
+  VectorType        Au(u);
+  model.system_operator(mu)->apply(Au, u);
+  const double energy = (model.geometry(mu).volume() - Au * u) / PeriodicHillGeometry<2>::length;
+  deallog << "hill width " << mu.at("hill_width")[0] << ": flow rate " << flow_rate
+          << ", relative difference to the flux through the crest "
+          << std::abs(cross_section_flux(model, mu, u, PeriodicHillGeometry<2>::length) - flow_rate) /
+               flow_rate
+          << ", the valley below 1e-6: "
+          << (std::abs(cross_section_flux(model, mu, u, PeriodicHillGeometry<2>::length / 2.) -
+                       flow_rate) < 1e-6 * flow_rate ?
+                "true" :
+                "false")
+          << ", equals ||grad phi||^2 / 9: "
+          << (std::abs(energy - flow_rate) < 1e-8 * flow_rate ? "true" : "false") << std::endl;
+}
+
+// The solution against the Laplacian on the mesh mapped by MappingQCache of growing degree.
+void
+test_mapping(const Model & model, const ParameterValues & mu, const VectorType & u)
+{
+  LogStream::Prefix prefix("mapping");
+  for(const unsigned int degree : {1u, 2u, 3u, 5u})
+  {
+    VectorType difference = *solve_on_mapped_mesh(model, mu, degree);
+    difference -= u;
+    deallog << "hill width " << mu.at("hill_width")[0] << ", mapping degree " << degree
+            << ": relative difference " << difference.l2_norm() / u.l2_norm() << std::endl;
+  }
+}
+
 int
 main(int argc, char ** argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
   mpi_initlog();
-  // Without the CG iterations, which depend on the partitioning.
-  deallog.depth_file(1);
+  // Without the CG iterations (below the sections), which depend on the partitioning.
+  deallog.depth_file(2);
   deallog.precision(3);
 
   const ParameterValues product_mu = {{"hill_height", {1.}}, {"hill_width", {3.}}};
   const Model           model(3, 2, 0., product_mu, MPI_COMM_WORLD);
   deallog << "dofs: " << model.solution_space()->n_dofs() << std::endl;
 
-  const ParameterValues flat     = {{"hill_height", {0.}}, {"hill_width", {3.}}};
-  const auto            u_flat   = solve(model, flat);
-  deallog << "flat channel, phi_tilde = 0: " << (u_flat->linfty_norm() < 1e-12 ? "true" : "false")
-          << ", flow rate 3.036: "
-          << (std::abs(model.flow_rate(flat, *u_flat) - PeriodicHillGeometry<2>::height) < 1e-12 ?
-                "true" :
-                "false")
-          << std::endl;
-
+  test_flat_channel(model);
   for(const double width : {1.93, 2.})
   {
     const ParameterValues mu = {{"hill_height", {1.}}, {"hill_width", {width}}};
     const auto            u  = solve(model, mu);
-
-    const double flow_rate = model.flow_rate(mu, *u);
-    VectorType   Au(*u);
-    model.system_operator(mu)->apply(Au, *u);
-    const double energy = (model.geometry(mu).volume() - Au * *u) / PeriodicHillGeometry<2>::length;
-    deallog << "hill width " << width << ": flow rate " << flow_rate
-            << ", relative difference to the flux through the crest "
-            << std::abs(cross_section_flux(model, mu, *u, PeriodicHillGeometry<2>::length) - flow_rate) /
-                 flow_rate
-            << ", the valley below 1e-6: "
-            << (std::abs(cross_section_flux(model, mu, *u, PeriodicHillGeometry<2>::length / 2.) -
-                         flow_rate) < 1e-6 * flow_rate ?
-                  "true" :
-                  "false")
-            << ", equals ||grad phi||^2 / 9: "
-            << (std::abs(energy - flow_rate) < 1e-8 * flow_rate ? "true" : "false") << std::endl;
-    for(const unsigned int degree : {1u, 2u, 3u, 5u})
-    {
-      VectorType difference = *solve_on_mapped_mesh(model, mu, degree);
-      difference -= *u;
-      deallog << "hill width " << width << ", mapping degree " << degree
-              << ": relative difference " << difference.l2_norm() / u->l2_norm() << std::endl;
-    }
+    test_flow_rate(model, mu, *u);
+    test_mapping(model, mu, *u);
   }
 }

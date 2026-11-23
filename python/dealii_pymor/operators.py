@@ -1,7 +1,7 @@
 """pyMOR operators of C++ `Operators` and `StationaryModels`."""
 
 import numpy as np
-from pymor.operators.constructions import ConstantOperator, LincombOperator
+from pymor.operators.constructions import ConstantOperator, LincombOperator, VectorFunctional
 from pymor.operators.interface import Operator
 from pymor.operators.list import ListVectorArrayOperatorBase
 from pymor.operators.numpy import NumpyMatrixOperator
@@ -12,16 +12,25 @@ from dealii_pymor.vectorarray import DealIIVectorSpace
 
 
 class DealIISolver(ListVectorArrayBasedSolver):
-    """Solves with the `apply_inverse` of the C++ operator."""
+    """Solves with the `apply_inverse` of the C++ operator, and with its `apply_inverse_adjoint` if
+    it has an adjoint."""
 
     def _solve_one_vector(self, operator, v, mu, initial_guess, prepare_data):
         u = operator.source.zero_vector() if initial_guess is None else initial_guess.copy(deep=True)
         operator.impl.apply_inverse(u.impl, v.impl)
         return u
 
+    def _solve_adjoint_one_vector(self, operator, u, mu, initial_guess, prepare_data):
+        if not operator.impl.has_adjoint():
+            raise NotImplementedError
+        v = operator.range.zero_vector() if initial_guess is None else initial_guess.copy(deep=True)
+        operator.impl.apply_inverse_adjoint(v.impl, u.impl)
+        return v
+
 
 class DealIIOperator(ListVectorArrayOperatorBase):
-    """A C++ `Operator`; inverted by its own `apply_inverse` if it has one."""
+    """A C++ `Operator`; inverted by its own `apply_inverse` if it has one, and with its own
+    `apply_adjoint` and `apply_inverse_adjoint` if it has an adjoint."""
 
     linear = True
 
@@ -37,12 +46,20 @@ class DealIIOperator(ListVectorArrayOperatorBase):
         self.impl.apply(v.impl, u.impl)
         return v
 
+    def _apply_adjoint_one_vector(self, v, mu=None):
+        if not self.impl.has_adjoint():
+            raise NotImplementedError
+        u = self.source.zero_vector()
+        self.impl.apply_adjoint(u.impl, v.impl)
+        return u
+
 
 class DealIIParametricOperator(Operator):
     """The system operator A(μ) of a C++ `StationaryModel` that depends on μ.
 
     For every μ, the C++ model assembles a new operator, which `assemble` returns as a
-    `DealIIOperator`; pyMOR's default solver inverts it with its own `apply_inverse`.
+    `DealIIOperator`; pyMOR's default solver inverts it with its own `apply_inverse`, and
+    `apply_inverse_adjoint` likewise.
     """
 
     linear = True
@@ -59,6 +76,10 @@ class DealIIParametricOperator(Operator):
     def apply(self, U, mu=None):
         assert U in self.source
         return self.assemble(mu).apply(U)
+
+    def apply_adjoint(self, V, mu=None):
+        assert V in self.range
+        return self.assemble(mu).apply_adjoint(V)
 
     def restricted(self, dofs):
         """For pyMOR's `EmpiricalInterpolatedOperator`: A(μ) only at `dofs`, see
@@ -132,6 +153,42 @@ class DealIIRestrictedRhsOperator(Operator):
         assert self.parameters.assert_compatible(mu)
         F = self.range.make_array(np.array(self.impl.evaluate(mu))[:, np.newaxis])
         return F.lincomb(U.to_numpy())
+
+
+class DealIIFunctional(Operator):
+    """A C++ `Functional` J(μ; u), a quantity of interest of the solutions of a C++
+    `StationaryModel`, as an operator from its solution space to R^1, e.g. as output functional.
+
+    Not linear in general. Its `jacobian` at u is the linear functional v ↦ dJ/du(μ; u) v, whose
+    `as_source_array` is the vector dJ/du(μ; u), so that the adjoint problem of the model for J is
+    `fom.operator.apply_inverse_adjoint(-J.jacobian(u, mu).as_source_array(mu), mu=mu)`.
+
+    Parameters
+    ----------
+    impl
+        The C++ `Functional`.
+    model
+        The C++ `StationaryModel` it belongs to, for its solution space and parameters.
+    """
+
+    linear = False
+
+    def __init__(self, impl, model, name=None):
+        self.__auto_init(locals())
+        self.source = DealIIVectorSpace(model.solution_space())
+        self.range = NumpyVectorSpace(1)
+        self.parameters_own = model.parameters()
+
+    def apply(self, U, mu=None):
+        assert U in self.source
+        assert self.parameters.assert_compatible(mu)
+        return self.range.make_array(np.array([[self.impl.value(mu, u.impl) for u in U.vectors]]))
+
+    def jacobian(self, U, mu=None):
+        assert U in self.source and len(U) == 1
+        assert self.parameters.assert_compatible(mu)
+        gradient = self.source.make_array([self.impl.gradient(mu, U.vectors[0].impl)])
+        return VectorFunctional(gradient, name=f'{self.name}_jacobian')
 
 
 class RhsFunctional(Operator):

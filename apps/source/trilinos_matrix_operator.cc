@@ -50,3 +50,21 @@ TrilinosMatrixOperator::apply_inverse(VectorType & dst, const VectorType & rhs) 
   dealii::SolverCG<VectorType> cg(control);
   cg.solve(*matrix, dst, rhs, preconditioner);
 }
+
+bool
+TrilinosMatrixOperator::has_adjoint() const
+{
+  return true;
+}
+
+void
+TrilinosMatrixOperator::apply_adjoint(VectorType & dst, const VectorType & src) const
+{
+  apply(dst, src);
+}
+
+void
+TrilinosMatrixOperator::apply_inverse_adjoint(VectorType & dst, const VectorType & rhs) const
+{
+  apply_inverse(dst, rhs);
+}

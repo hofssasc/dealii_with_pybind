@@ -12,7 +12,7 @@
 
 /**
  * A symmetric positive definite Trilinos matrix as an Operator, inverted by CG with an algebraic
- * multigrid preconditioner.
+ * multigrid preconditioner. Being symmetric, it is its own adjoint.
  */
 class TrilinosMatrixOperator : public Operator<dealii::LinearAlgebra::distributed::Vector<double>>
 {
@@ -38,6 +38,17 @@ public:
 
   void
   apply_inverse(VectorType & dst, const VectorType & rhs) const override;
+
+  bool
+  has_adjoint() const override;
+
+  // apply(), as the matrix is symmetric.
+  void
+  apply_adjoint(VectorType & dst, const VectorType & src) const override;
+
+  // apply_inverse(), as the matrix is symmetric.
+  void
+  apply_inverse_adjoint(VectorType & dst, const VectorType & rhs) const override;
 
 private:
   std::shared_ptr<const dealii::TrilinosWrappers::SparseMatrix> matrix;

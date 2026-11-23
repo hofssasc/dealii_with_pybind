@@ -1,0 +1,7 @@
+solve::parameters: {hill_height: 1, hill_width: 1}, dimension: 1825, operator: DealIIParametricOperator
+solve::relative residual below 1e-9: True
+solve::h1_semi norm of phi_tilde: 1.232971e+00
+solve::flow written: flow_0.pvtu
+flow_rate::flow rate: 2.675595, same as flow_rate() of the C++ model: True
+adjoint::(A^T G, U) = (G, A U): True
+adjoint::adjoint solve, relative residual below 1e-9: True

@@ -1,4 +1,4 @@
 
 DEAL::dofs: 120, unconstrained: 72
-DEAL::rows: 72, source dofs unconstrained: true, same f: true, same A u: true
-DEAL::rows: 11, source dofs unconstrained: true, same f: true, same A u: true
+DEAL:unconstrained_dofs::rows: 72, source dofs unconstrained: true, same f: true, same A u: true
+DEAL:every_7th::rows: 11, source dofs unconstrained: true, same f: true, same A u: true

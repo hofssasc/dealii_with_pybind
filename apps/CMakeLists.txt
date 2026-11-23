@@ -6,6 +6,7 @@ target_sources(applications
 	    source/exadg_poisson_operator.cc
 	    source/gaussian_source.cc
 	    source/gaussian_source_matrix_free.cc
+	    source/periodic_hill_functionals.cc
 	    source/periodic_hill_geometry.cc
 	    source/periodic_hill_potential_flow.cc
 	    source/restricted_assembly.cc
@@ -17,6 +18,7 @@ target_sources(applications
 	        include
 	    FILES
 	        # abstract interfaces, bound to python once per vector type
+	        include/interfaces/functional.h
 	        include/interfaces/operator.h
 	        include/interfaces/stationary_model.h
 	        include/interfaces/vector_space.h
@@ -25,6 +27,7 @@ target_sources(applications
 	        include/implementations/exadg_poisson_operator.h
 	        include/implementations/gaussian_source.h
 	        include/implementations/gaussian_source_matrix_free.h
+	        include/implementations/periodic_hill_functionals.h
 	        include/implementations/periodic_hill_geometry.h
 	        include/implementations/periodic_hill_potential_flow.h
 	        include/implementations/restricted_assembly.h

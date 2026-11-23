@@ -1,6 +1,6 @@
-right-hand side snapshots: 144, interpolation dofs: 64
-reduced basis alone: largest relative error of the solution 3.6e-03
-interpolation dofs 16: largest relative error of the right-hand side 1.6e-01, of the solution 5.9e-02
-interpolation dofs 32: largest relative error of the right-hand side 1.9e-02, of the solution 5.8e-03
-interpolation dofs 64: largest relative error of the right-hand side 4.3e-04, of the solution 3.6e-03
-reduced right-hand side: ProjectedEmpiricalInterpolatedOperator
+interpolation::right-hand side snapshots: 144, interpolation dofs: 64
+reduction::reduced basis alone: largest relative error of the solution 3.6e-03
+reduction::interpolation dofs 16: largest relative error of the right-hand side 1.6e-01, of the solution 5.9e-02
+reduction::interpolation dofs 32: largest relative error of the right-hand side 1.9e-02, of the solution 5.8e-03
+reduction::interpolation dofs 64: largest relative error of the right-hand side 4.3e-04, of the solution 3.6e-03
+reduction::reduced right-hand side: ProjectedEmpiricalInterpolatedOperator
